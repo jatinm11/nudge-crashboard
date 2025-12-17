@@ -642,7 +642,7 @@ const parseCSV = (text) => {
 }
 
 // Batch symbolication
-const symbolicateCrashes = async (crashesList) => {
+const symbolicateCrashes = async (crashesList, apiUrl) => {
   // Group by SDK version AND Load Address (since ASLR slide varies per session)
   const groups = {}
 
@@ -668,7 +668,7 @@ const symbolicateCrashes = async (crashesList) => {
       const payload = { sdkVersion: grp.sdkVersion, addresses }
       if (grp.loadAddress) payload.loadAddress = grp.loadAddress
 
-      const res = await fetch('http://localhost:3001/symbolicate', {
+      const res = await fetch(`${apiUrl}/symbolicate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -710,6 +710,7 @@ const CrashDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [peekCrash, setPeekCrash] = useState(null)
   const [manualLoadAddress, setManualLoadAddress] = useState("")
+  const [symbolicationApiUrl, setSymbolicationApiUrl] = useState("http://localhost:3001")
 
   const handleManualSymbolication = async () => {
     if (!selectedCrash || !manualLoadAddress) return
@@ -722,7 +723,7 @@ const CrashDashboard = () => {
     }
 
     try {
-      const res = await fetch('http://localhost:3001/symbolicate', {
+      const res = await fetch(`${symbolicationApiUrl}/symbolicate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
