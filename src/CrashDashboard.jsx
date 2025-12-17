@@ -31,6 +31,8 @@ import {
   Smartphone,
   Globe,
   Upload,
+  Moon,
+  Sun,
 } from "lucide-react"
 
 const initialCrashes = [
@@ -697,6 +699,7 @@ const CrashDashboard = () => {
   const [peekCrash, setPeekCrash] = useState(null)
   const [manualLoadAddress, setManualLoadAddress] = useState("")
   const [symbolicationApiUrl, setSymbolicationApiUrl] = useState("http://localhost:3001")
+  const [darkMode, setDarkMode] = useState(false)
 
   const handleManualSymbolication = async () => {
     if (!selectedCrash || !manualLoadAddress) return
@@ -760,7 +763,7 @@ const CrashDashboard = () => {
   const [filterClients, setFilterClients] = useState([])
   const [filterStatuses, setFilterStatuses] = useState([])
   const [filterSeverities, setFilterSeverities] = useState([])
-  const [dateRange, setDateRange] = useState("24h")
+  const [dateRange, setDateRange] = useState("All")
   const [customRange, setCustomRange] = useState({ start: "", end: "" })
   const [useUTC, setUseUTC] = useState(false)
 
@@ -859,7 +862,7 @@ const CrashDashboard = () => {
       }
     })
     return Object.values(stats)
-  }, [])
+  }, [crashes])
 
   // Fingerprinted groups
   const groups = useMemo(() => {
@@ -903,6 +906,7 @@ const CrashDashboard = () => {
     dateRange,
     customRange,
     useUTC,
+    crashes,
   ])
 
   // Stats
@@ -972,7 +976,7 @@ const CrashDashboard = () => {
     })
     const max = Math.max(0, ...grid.flat())
     return { rows: rowKeys, cols: colKeys, grid, max }
-  }, [])
+  }, [crashes])
 
   const heat_client_sev = useMemo(() => {
     const rowKeys = [...new Set(crashes.map((c) => c.client))].sort()
@@ -985,7 +989,7 @@ const CrashDashboard = () => {
     })
     const max = Math.max(0, ...grid.flat())
     return { rows: rowKeys, cols: colKeys, grid, max }
-  }, [])
+  }, [crashes])
 
   // UI helpers
   const toggleIn = (value, list, setter) => {
@@ -996,17 +1000,17 @@ const CrashDashboard = () => {
   const Sidebar = () => (
     <div
       className={`${sidebarOpen ? "w-64" : "w-20"
-        } bg-white border-r border-gray-100 shadow-sm transition-all duration-300 flex flex-col`}
+        } ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-100'} border-r shadow-sm transition-all duration-300 flex flex-col`}
     >
-      <div className='p-6 border-b border-gray-100'>
+      <div className={`p-6 border-b ${darkMode ? 'border-neutral-800' : 'border-gray-100'}`}>
         <div className='flex items-center gap-3'>
           <div className='w-10 h-10 bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg flex items-center justify-center'>
             <BarChart3 className='text-white' size={20} />
           </div>
           {sidebarOpen && (
             <div>
-              <h2 className='font-semibold text-gray-900'>Crashboard</h2>
-              <p className='text-xs text-gray-500'>Nudge SDK Monitor</p>
+              <h2 className={`font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Crashboard</h2>
+              <p className={`text-xs ${darkMode ? 'text-neutral-500' : 'text-gray-500'}`}>Nudge SDK Monitor</p>
             </div>
           )}
         </div>
@@ -1015,8 +1019,8 @@ const CrashDashboard = () => {
       <nav className='flex-1 p-4 space-y-1'>
         {[
           { key: "home", icon: Home, label: "Dashboard" },
-          { key: "clients", icon: Users, label: "Clients" },
           { key: "crashes", icon: AlertCircle, label: "Crashes" },
+          { key: "clients", icon: Users, label: "Clients" },
           { key: "analytics", icon: BarChart3, label: "Analytics" },
         ].map((item) => (
           <button
@@ -1026,8 +1030,8 @@ const CrashDashboard = () => {
               setSelectedClient(null)
             }}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${currentView === item.key
-              ? "bg-gray-900 text-white border border-gray-700"
-              : "text-gray-900 hover:bg-gray-100"
+              ? (darkMode ? "bg-neutral-800 text-white border border-neutral-700" : "bg-gray-900 text-white border border-gray-700")
+              : (darkMode ? "text-neutral-300 hover:bg-neutral-800" : "text-gray-900 hover:bg-gray-100")
               }`}
           >
             <item.icon size={20} />
@@ -1036,27 +1040,27 @@ const CrashDashboard = () => {
         ))}
       </nav>
 
-      <div className='p-4 border-t border-gray-100 space-y-4'>
+      <div className={`p-4 border-t ${darkMode ? 'border-neutral-800' : 'border-gray-100'} space-y-4`}>
         {sidebarOpen && (
           <div>
-            <div className='text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-1'>
+            <div className={`text-xs font-semibold uppercase tracking-wider mb-2 px-1 ${darkMode ? 'text-neutral-600' : 'text-gray-400'}`}>
               Symbolication Server
             </div>
             <div className='relative'>
-              <Globe className='absolute left-3 top-2.5 h-4 w-4 text-gray-400' />
+              <Globe className={`absolute left-3 top-2.5 h-4 w-4 ${darkMode ? 'text-neutral-600' : 'text-gray-400'}`} />
               <input
                 type='text'
                 placeholder='Server URL'
                 value={symbolicationApiUrl}
                 onChange={(e) => setSymbolicationApiUrl(e.target.value)}
-                className='w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all'
+                className={`w-full pl-9 pr-3 py-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all ${darkMode ? 'bg-neutral-800 border-neutral-700 text-white placeholder-neutral-600' : 'bg-gray-50 border-gray-200'}`}
               />
             </div>
           </div>
         )}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className='w-full flex items-center gap-3 px-4 py-3 text-gray-900 hover:bg-gray-100 rounded-lg transition-colors'
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${darkMode ? 'text-neutral-300 hover:bg-neutral-800' : 'text-gray-900 hover:bg-gray-100'}`}
         >
           <Menu size={20} />
           {sidebarOpen && <span className='font-medium'>Collapse</span>}
@@ -1066,8 +1070,8 @@ const CrashDashboard = () => {
   )
 
   const FilterBar = () => (
-    <div className='flex flex-wrap gap-3 items-center p-4 bg-white rounded-lg border border-gray-200'>
-      <div className='flex items-center gap-2 text-sm text-gray-600'>
+    <div className={`flex flex-wrap gap-3 items-center p-4 rounded-lg border ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
+      <div className={`flex items-center gap-2 text-sm ${darkMode ? 'text-neutral-500' : 'text-gray-600'}`}>
         <Filter size={16} />
         <span>Filters</span>
       </div>
@@ -1076,7 +1080,7 @@ const CrashDashboard = () => {
       <select
         value={dateRange}
         onChange={(e) => setDateRange(e.target.value)}
-        className='px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+        className={`px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${darkMode ? 'bg-neutral-800 border-neutral-700 text-white' : 'bg-white border-gray-300'}`}
       >
         <option value='24h'>Last 24 hours</option>
         <option value='7d'>Last 7 days</option>
@@ -1090,7 +1094,7 @@ const CrashDashboard = () => {
         onChange={(e) =>
           setFilterStatuses(e.target.value ? [e.target.value] : [])
         }
-        className='px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+        className={`px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${darkMode ? 'bg-neutral-800 border-neutral-700 text-white' : 'bg-white border-gray-300'}`}
       >
         <option value=''>All statuses</option>
         {statuses.map((status) => (
@@ -1121,7 +1125,7 @@ const CrashDashboard = () => {
           onClick={() => setUseUTC((v) => !v)}
           className={`px-3 py-2 text-sm border rounded-lg transition-colors ${useUTC
             ? "bg-blue-50 border-blue-200 text-blue-700"
-            : "bg-white border-gray-300 text-gray-600 hover:bg-gray-50"
+            : (darkMode ? "bg-neutral-800 border-neutral-700 text-neutral-300 hover:bg-neutral-700" : "bg-white border-gray-300 text-gray-600 hover:bg-gray-50")
             }`}
         >
           {useUTC ? "UTC" : "Local"}
@@ -1135,8 +1139,8 @@ const CrashDashboard = () => {
       {/* Header */}
       <div className='flex items-center justify-between'>
         <div>
-          <h1 className='text-2xl font-semibold text-gray-900'>Overview ⚡️</h1>
-          <p className='text-sm text-gray-500 mt-1'>
+          <h1 className={`text-2xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Overview ⚡️</h1>
+          <p className={`text-sm mt-1 ${darkMode ? 'text-neutral-500' : 'text-gray-500'}`}>
             Current SDK crash metrics
           </p>
         </div>
@@ -1161,7 +1165,7 @@ const CrashDashboard = () => {
               placeholder='Search crashes, clients... ( / )'
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className='w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white'
+              className={`w-full pl-10 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${darkMode ? 'bg-neutral-900 border-neutral-800 text-white placeholder-neutral-600' : 'bg-white border-gray-300'}`}
             />
           </div>
         </div>
@@ -1169,48 +1173,48 @@ const CrashDashboard = () => {
 
       {/* Stats Cards */}
       <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6'>
-        <div className='bg-white p-6 rounded-xl border border-gray-200 shadow-sm'>
+        <div className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
           <div className='flex items-center justify-between mb-4'>
-            <h3 className='text-sm font-medium text-gray-600'>Total Crashes</h3>
-            <div className='w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center'>
-              <AlertCircle className='text-blue-600' size={20} />
+            <h3 className={`text-sm font-medium ${darkMode ? 'text-neutral-500' : 'text-gray-600'}`}>Total Crashes</h3>
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${darkMode ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
+              <AlertCircle className={darkMode ? 'text-blue-400' : 'text-blue-600'} size={20} />
             </div>
           </div>
-          <p className='text-3xl font-semibold text-gray-900'>{stats.total}</p>
+          <p className={`text-3xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{stats.total}</p>
         </div>
 
-        <div className='bg-white p-6 rounded-xl border border-gray-200 shadow-sm'>
+        <div className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
           <div className='flex items-center justify-between mb-4'>
-            <h3 className='text-sm font-medium text-gray-600'>Open Issues</h3>
-            <div className='w-10 h-10 bg-orange-50 rounded-lg flex items-center justify-center'>
-              <Activity className='text-orange-600' size={20} />
+            <h3 className={`text-sm font-medium ${darkMode ? 'text-neutral-500' : 'text-gray-600'}`}>Open Issues</h3>
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${darkMode ? 'bg-orange-500/10' : 'bg-orange-50'}`}>
+              <Activity className={darkMode ? 'text-orange-400' : 'text-orange-600'} size={20} />
             </div>
           </div>
-          <p className='text-3xl font-semibold text-gray-900'>{stats.open}</p>
+          <p className={`text-3xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{stats.open}</p>
         </div>
 
-        <div className='bg-white p-6 rounded-xl border border-gray-200 shadow-sm'>
+        <div className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
           <div className='flex items-center justify-between mb-4'>
-            <h3 className='text-sm font-medium text-gray-600'>Critical</h3>
-            <div className='w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center'>
-              <Shield className='text-red-600' size={20} />
+            <h3 className={`text-sm font-medium ${darkMode ? 'text-neutral-500' : 'text-gray-600'}`}>Critical</h3>
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${darkMode ? 'bg-red-500/10' : 'bg-red-50'}`}>
+              <Shield className={darkMode ? 'text-red-400' : 'text-red-600'} size={20} />
             </div>
           </div>
-          <p className='text-3xl font-semibold text-gray-900'>
+          <p className={`text-3xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
             {stats.critical}
           </p>
         </div>
 
-        <div className='bg-white p-6 rounded-xl border border-gray-200 shadow-sm'>
+        <div className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
           <div className='flex items-center justify-between mb-4'>
-            <h3 className='text-sm font-medium text-gray-600'>
+            <h3 className={`text-sm font-medium ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
               Affected Clients
             </h3>
-            <div className='w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center'>
-              <Users className='text-green-600' size={20} />
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${darkMode ? 'bg-green-500/10' : 'bg-green-50'}`}>
+              <Users className={darkMode ? 'text-green-400' : 'text-green-600'} size={20} />
             </div>
           </div>
-          <p className='text-3xl font-semibold text-gray-900'>
+          <p className={`text-3xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
             {stats.affectedClients}
           </p>
         </div>
@@ -1219,33 +1223,33 @@ const CrashDashboard = () => {
       {/* Recent Crashes */}
       {/* Recent Crashes or Empty State */}
       {crashes.length === 0 ? (
-        <div className='bg-white rounded-xl border border-dashed border-gray-300 p-12 text-center'>
-          <div className='mx-auto w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4'>
-            <Upload className='text-gray-400' size={24} />
+        <div className={`rounded-xl border p-12 text-center ${darkMode ? 'bg-neutral-900 border-neutral-800 border-dashed' : 'bg-white border-dashed border-gray-300'}`}>
+          <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 ${darkMode ? 'bg-neutral-800' : 'bg-gray-50'}`}>
+            <Upload className={darkMode ? 'text-neutral-600' : 'text-gray-400'} size={24} />
           </div>
-          <h3 className='text-lg font-semibold text-gray-900 mb-1'>
+          <h3 className={`text-lg font-semibold mb-1 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
             No crashes loaded yet
           </h3>
-          <p className='text-sm text-gray-500 mb-6 max-w-sm mx-auto'>
+          <p className={`text-sm mb-6 max-w-sm mx-auto ${darkMode ? 'text-neutral-500' : 'text-gray-500'}`}>
             Upload a CSV file to populate the dashboard with crash data and start investigating.
           </p>
           <button
             onClick={() => fileInputRef.current?.click()}
-            className='inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-all font-medium'
+            className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg transition-all font-medium ${darkMode ? 'bg-white text-black hover:bg-neutral-200' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
           >
             <Upload size={16} />
             Import CSV
           </button>
         </div>
       ) : (
-        <div className='bg-white rounded-xl border border-gray-200 shadow-sm'>
-          <div className='p-6 border-b border-gray-100'>
+        <div className={`rounded-xl border shadow-sm ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
+          <div className={`p-6 border-b ${darkMode ? 'border-neutral-800' : 'border-gray-100'}`}>
             <div className='flex items-center justify-between'>
               <div>
-                <h2 className='text-lg font-semibold text-gray-900'>
+                <h2 className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                   Recent Crashes
                 </h2>
-                <p className='text-sm text-gray-500 mt-1'>
+                <p className={`text-sm mt-1 ${darkMode ? 'text-neutral-500' : 'text-gray-500'}`}>
                   Latest reported issues from your SDK
                 </p>
               </div>
@@ -1262,12 +1266,12 @@ const CrashDashboard = () => {
             {recentCrashes.map((crash) => (
               <div
                 key={crash.id}
-                className='p-6 hover:bg-gray-50 transition-colors group'
+                className={`p-6 transition-colors group ${darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-50'}`}
               >
                 <div className='flex items-start justify-between'>
                   <div className='flex-1'>
                     <div className='flex items-center gap-3 mb-3'>
-                      <span className='font-mono text-sm font-semibold text-gray-900'>
+                      <span className={`font-mono text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                         {crash.id}
                       </span>
                       <span
@@ -1286,11 +1290,11 @@ const CrashDashboard = () => {
                       </span>
                     </div>
 
-                    <p className='text-sm text-gray-600 mb-2 line-clamp-1'>
+                    <p className={`text-sm mb-2 line-clamp-1 ${darkMode ? 'text-neutral-400' : 'text-gray-600'}`}>
                       {crash.exceptionName} in {crash.crashLocation.symbolName}
                     </p>
 
-                    <div className='flex items-center gap-4 text-xs text-gray-500'>
+                    <div className={`flex items-center gap-4 text-xs ${darkMode ? 'text-neutral-500' : 'text-gray-500'}`}>
                       <span className='flex items-center gap-1'>
                         <Users size={12} />
                         {crash.client}
@@ -1331,14 +1335,14 @@ const CrashDashboard = () => {
     <div className='space-y-6'>
       <div className='flex items-center justify-between'>
         <div>
-          <h1 className='text-2xl font-semibold text-gray-900'>
+          <h1 className={`text-2xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
             Client Management 📚
           </h1>
-          <p className='text-sm text-gray-500 mt-1'>
+          <p className={`text-sm mt-1 ${darkMode ? 'text-neutral-500' : 'text-gray-500'}`}>
             View and manage client crash reports
           </p>
         </div>
-        <div className='relative w-80'>
+        <div className='relative w-96'>
           <Search
             className='absolute left-3 top-1/2 -translate-y-1/2 text-gray-400'
             size={18}
@@ -1346,62 +1350,83 @@ const CrashDashboard = () => {
           <input
             type='text'
             placeholder='Search clients…'
-            className='w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white'
+            className={`w-full pl-10 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${darkMode ? 'bg-neutral-900 border-neutral-800 text-white placeholder-neutral-600' : 'bg-white border-gray-300'}`}
           />
         </div>
       </div>
 
-      <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
-        {clientStats.map((client) => (
+      {clientStats.length === 0 ? (
+        <div className={`rounded-xl border p-12 text-center ${darkMode ? 'bg-neutral-900 border-neutral-800 border-dashed' : 'bg-white border-dashed border-gray-300'}`}>
+          <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 ${darkMode ? 'bg-neutral-800' : 'bg-gray-50'}`}>
+            <Upload className={darkMode ? 'text-neutral-600' : 'text-gray-400'} size={24} />
+          </div>
+          <h3 className={`text-lg font-semibold mb-1 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+            No clients found
+          </h3>
+          <p className={`text-sm mb-6 max-w-sm mx-auto ${darkMode ? 'text-neutral-500' : 'text-gray-500'}`}>
+            Upload a CSV file to populate the dashboard with crash data and view client information.
+          </p>
           <button
-            key={client.id}
-            onClick={() => setSelectedClient(client)}
-            className='bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300 transition-all text-left group'
+            onClick={() => fileInputRef.current?.click()}
+            className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg transition-all font-medium ${darkMode ? 'bg-white text-black hover:bg-neutral-200' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
           >
-            <div className='flex items-center gap-3 mb-4'>
-              {/* <div className='w-12 h-12 bg-gradient-to-br from-gray-700 to-gray-800 rounded-xl flex items-center justify-center'>
-                <span className='text-lg font-semibold text-white'>
-                  {client.name.charAt(0)}
-                </span>
-              </div> */}
-              <div className='flex-1'>
-                <h3 className='font-semibold text-gray-900 group-hover:text-blue-600 transition-colors'>
-                  {client.name}
-                </h3>
-                <p className='text-xs text-gray-500'>Client ID: {client.id}</p>
-              </div>
-            </div>
-
-            <div className='grid grid-cols-3 gap-4 mb-4'>
-              <div>
-                <p className='text-xs text-gray-500 mb-1'>Total</p>
-                <p className='text-lg font-semibold text-gray-900'>
-                  {client.totalCrashes}
-                </p>
-              </div>
-              <div>
-                <p className='text-xs text-gray-500 mb-1'>Open</p>
-                <p className='text-lg font-semibold text-red-600'>
-                  {client.openCrashes}
-                </p>
-              </div>
-              <div>
-                <p className='text-xs text-gray-500 mb-1'>Critical</p>
-                <p className='text-lg font-semibold text-orange-600'>
-                  {client.criticalCrashes}
-                </p>
-              </div>
-            </div>
-
-            <div className='pt-4 border-t border-gray-100'>
-              <p className='text-xs text-gray-500'>Last crash</p>
-              <p className='text-sm text-gray-700 mt-1'>
-                {formatTimestamp(client.lastCrash, useUTC)}
-              </p>
-            </div>
+            <Upload size={16} />
+            Import CSV
           </button>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
+          {clientStats.map((client) => (
+            <button
+              key={client.id}
+              onClick={() => setSelectedClient(client)}
+              className={`rounded-xl p-6 border shadow-sm transition-all text-left group ${darkMode ? 'bg-neutral-900 border-neutral-800 hover:shadow-md hover:border-neutral-700' : 'bg-white border-gray-200 hover:shadow-md hover:border-gray-300'}`}
+            >
+              <div className='flex items-center gap-3 mb-4'>
+                {/* <div className='w-12 h-12 bg-gradient-to-br from-gray-700 to-gray-800 rounded-xl flex items-center justify-center'>
+                  <span className='text-lg font-semibold text-white'>
+                    {client.name.charAt(0)}
+                  </span>
+                </div> */}
+                <div className='flex-1'>
+                  <h3 className={`font-semibold transition-colors ${darkMode ? 'text-white group-hover:text-blue-400' : 'text-gray-900 group-hover:text-blue-600'}`}>
+                    {client.name}
+                  </h3>
+                  <p className='text-xs text-gray-500'>Client ID: {client.id}</p>
+                </div>
+              </div>
+
+              <div className='grid grid-cols-3 gap-4 mb-4'>
+                <div>
+                  <p className='text-xs text-gray-500 mb-1'>Total</p>
+                  <p className='text-lg font-semibold text-gray-900'>
+                    {client.totalCrashes}
+                  </p>
+                </div>
+                <div>
+                  <p className='text-xs text-gray-500 mb-1'>Open</p>
+                  <p className='text-lg font-semibold text-red-600'>
+                    {client.openCrashes}
+                  </p>
+                </div>
+                <div>
+                  <p className='text-xs text-gray-500 mb-1'>Critical</p>
+                  <p className='text-lg font-semibold text-orange-600'>
+                    {client.criticalCrashes}
+                  </p>
+                </div>
+              </div>
+
+              <div className='pt-4 border-t border-gray-100'>
+                <p className='text-xs text-gray-500'>Last crash</p>
+                <p className='text-sm text-gray-700 mt-1'>
+                  {formatTimestamp(client.lastCrash, useUTC)}
+                </p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 
@@ -1420,19 +1445,19 @@ const CrashDashboard = () => {
             <ChevronRight size={20} className='rotate-180' />
           </button>
           <div>
-            <h1 className='text-2xl font-semibold text-gray-900'>
+            <h1 className={`text-2xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
               {selectedClient.name}
             </h1>
-            <p className='text-sm text-gray-500 mt-1'>
+            <p className={`text-sm mt-1 ${darkMode ? 'text-neutral-500' : 'text-gray-500'}`}>
               Detailed crash analytics
             </p>
           </div>
         </div>
 
         <div className='grid grid-cols-1 md:grid-cols-4 gap-6'>
-          <div className='bg-white p-6 rounded-xl border border-gray-200 shadow-sm'>
-            <p className='text-sm text-gray-600 mb-1'>Total Crashes</p>
-            <p className='text-3xl font-semibold text-gray-900'>
+          <div className={`p-6 rounded-xl border shadow-sm ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
+            <p className={`text-sm mb-1 ${darkMode ? 'text-neutral-500' : 'text-gray-600'}`}>Total Crashes</p>
+            <p className={`text-3xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
               {selectedClient.totalCrashes}
             </p>
           </div>
@@ -1465,10 +1490,10 @@ const CrashDashboard = () => {
     <div className='space-y-6'>
       <div className='flex items-center justify-between'>
         <div>
-          <h1 className='text-2xl font-semibold text-gray-900'>
+          <h1 className={`text-2xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
             All Crashes 💥
           </h1>
-          <p className='text-sm text-gray-500 mt-1'>
+          <p className={`text-sm mt-1 ${darkMode ? 'text-neutral-500' : 'text-gray-500'}`}>
             Complete crash history and analytics
           </p>
         </div>
@@ -1483,7 +1508,7 @@ const CrashDashboard = () => {
             placeholder='Search crashes, symbols, exceptions ( / )'
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className='w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white'
+            className={`w-full pl-10 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${darkMode ? 'bg-neutral-900 border-neutral-800 text-white placeholder-neutral-600' : 'bg-white border-gray-300'}`}
           />
         </div>
       </div>
@@ -1505,10 +1530,10 @@ const CrashDashboard = () => {
       <div className='space-y-6'>
         <div className='flex items-center justify-between'>
           <div>
-            <h1 className='text-2xl font-semibold text-gray-900'>
+            <h1 className={`text-2xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
               Analytics ⚒️
             </h1>
-            <p className='text-sm text-gray-500 mt-1'>
+            <p className={`text-sm mt-1 ${darkMode ? 'text-neutral-500' : 'text-gray-500'}`}>
               Release health, offenders, heatmaps & regressions
             </p>
           </div>
@@ -1520,7 +1545,7 @@ const CrashDashboard = () => {
             <span className='text-gray-300'>•</span>
             <button
               onClick={() => setUseUTC((v) => !v)}
-              className='text-xs px-2 py-1 border rounded-md bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+              className={`text-xs px-2 py-1 border rounded-md ${darkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:bg-neutral-700' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'}`}
             >
               {useUTC ? "UTC" : "Local"}
             </button>
@@ -1529,10 +1554,10 @@ const CrashDashboard = () => {
 
         {/* Row 1: Release Health + Top Offenders */}
         <div className='grid grid-cols-1 lg:grid-cols-2 gap-6'>
-          <div className='bg-white border border-gray-200 rounded-xl p-6'>
+          <div className={`border rounded-xl p-6 ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
             <div className='flex items-center gap-2 mb-4'>
               <Gauge size={18} className='text-blue-600' />
-              <h3 className='font-semibold text-gray-900'>
+              <h3 className={`font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                 Release Health (24h)
               </h3>
             </div>
@@ -1657,7 +1682,7 @@ const CrashDashboard = () => {
     }, [groups, useUTC])
 
     return (
-      <div className='bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden'>
+      <div className={`rounded-xl border shadow-sm overflow-hidden ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
         <div className='overflow-x-auto'>
           <table className='w-full'>
             <thead className='bg-gray-50 border-b border-gray-200'>
@@ -1771,7 +1796,7 @@ const CrashDashboard = () => {
 
         <div className='px-6 py-4 border-t border-gray-200 bg-gray-50'>
           <p className='text-sm text-gray-600'>
-            Showing {crashes.length} of {initialCrashes.length} crashes (Total Loaded)
+            Showing {filteredCrashes.length} of {crashes.length} crashes (Total Loaded)
           </p>
         </div>
       </div>
@@ -1791,12 +1816,12 @@ const CrashDashboard = () => {
         />
 
         {/* Modal */}
-        <div className='relative bg-white w-full max-w-5xl max-h-[90vh] rounded-2xl shadow-2xl border border-gray-200 overflow-hidden'>
+        <div className={`relative w-full max-w-5xl max-h-[90vh] rounded-2xl shadow-2xl border overflow-hidden ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
           {/* Header */}
-          <div className='sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between'>
+          <div className={`sticky top-0 z-10 border-b px-6 py-4 flex items-center justify-between ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
             <div>
-              <h2 className='text-xl font-semibold text-gray-900'>{c.id}</h2>
-              <p className='text-xs text-gray-500'>
+              <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{c.id}</h2>
+              <p className={`text-xs ${darkMode ? 'text-neutral-500' : 'text-gray-500'}`}>
                 {c.client} • {formatTimestamp(c.timestamp, useUTC)}
               </p>
             </div>
@@ -1989,11 +2014,11 @@ const CrashDashboard = () => {
     return (
       <div className='fixed inset-0 z-50 flex'>
         <div className='flex-1' onClick={() => setPeekCrash(null)} />
-        <div className='w-[520px] max-w-[90vw] h-full bg-white border-l border-gray-200 shadow-2xl overflow-y-auto'>
-          <div className='sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between'>
+        <div className={`w-[520px] max-w-[90vw] h-full border-l shadow-2xl overflow-y-auto ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
+          <div className={`sticky top-0 border-b px-6 py-4 flex items-center justify-between ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
             <div>
-              <h2 className='text-lg font-semibold text-gray-900'>{c.id}</h2>
-              <p className='text-xs text-gray-500'>
+              <h2 className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{c.id}</h2>
+              <p className={`text-xs ${darkMode ? 'text-neutral-500' : 'text-gray-500'}`}>
                 {c.client} • {formatTimestamp(c.timestamp, useUTC)}
               </p>
             </div>
@@ -2126,16 +2151,16 @@ const CrashDashboard = () => {
   }
 
   return (
-    <div className='flex h-screen bg-gray-50 w-full overflow-hidden'>
+    <div className={`flex h-screen w-full overflow-hidden ${darkMode ? 'bg-black' : 'bg-gray-50'}`}>
       <Sidebar />
 
       <div className='flex-1 overflow-y-auto'>
         <div className='max-w-[1400px] mx-auto px-8 py-8'>
-          {currentView === "home" && <HomeView />}
-          {currentView === "clients" && !selectedClient && <ClientsView />}
-          {currentView === "clients" && selectedClient && <ClientDetailView />}
-          {currentView === "crashes" && <CrashesView />}
-          {currentView === "analytics" && <AnalyticsView />}
+          {currentView === "home" && HomeView()}
+          {currentView === "clients" && !selectedClient && ClientsView()}
+          {currentView === "clients" && selectedClient && ClientDetailView()}
+          {currentView === "crashes" && CrashesView()}
+          {currentView === "analytics" && AnalyticsView()}
         </div>
       </div>
 
