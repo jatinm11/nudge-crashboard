@@ -33,14 +33,6 @@ import {
   Upload,
 } from "lucide-react"
 
-/**
- * ---------------------------------------
- * MOCK DATA (extended with device/env/user)
- * ---------------------------------------
- */
-
-
-
 const initialCrashes = [
   {
     id: "CRH-0001",
@@ -406,12 +398,6 @@ const initialCrashes = [
   },
 ]
 
-/**
- * -------------------------
- * HELPERS & DERIVED METRICS
- * -------------------------
- */
-
 // Fingerprint: exception + top-frame symbol (first two parts) + appVersion major
 const fingerprint = (crash) => {
   const sym =
@@ -703,7 +689,7 @@ const symbolicateCrashes = async (crashesList, apiUrl) => {
 }
 
 const CrashDashboard = () => {
-  const [crashes, setCrashes] = useState(initialCrashes)
+  const [crashes, setCrashes] = useState([])
   const [currentView, setCurrentView] = useState("home")
   const [selectedClient, setSelectedClient] = useState(null)
   const [selectedCrash, setSelectedCrash] = useState(null)
@@ -811,7 +797,7 @@ const CrashDashboard = () => {
       if (parsed.length > 0) {
         setCrashes(parsed)
         // Trigger symbolication
-        const symbolicated = await symbolicateCrashes(parsed)
+        const symbolicated = await symbolicateCrashes(parsed, symbolicationApiUrl)
         setCrashes(symbolicated)
         alert(`Loaded ${parsed.length} crashes (and attempted symbolication)`)
       } else {
@@ -1050,7 +1036,24 @@ const CrashDashboard = () => {
         ))}
       </nav>
 
-      <div className='p-4 border-t border-gray-100'>
+      <div className='p-4 border-t border-gray-100 space-y-4'>
+        {sidebarOpen && (
+          <div>
+            <div className='text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-1'>
+              Symbolication Server
+            </div>
+            <div className='relative'>
+              <Globe className='absolute left-3 top-2.5 h-4 w-4 text-gray-400' />
+              <input
+                type='text'
+                placeholder='Server URL'
+                value={symbolicationApiUrl}
+                onChange={(e) => setSymbolicationApiUrl(e.target.value)}
+                className='w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all'
+              />
+            </div>
+          </div>
+        )}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           className='w-full flex items-center gap-3 px-4 py-3 text-gray-900 hover:bg-gray-100 rounded-lg transition-colors'
@@ -1138,13 +1141,15 @@ const CrashDashboard = () => {
           </p>
         </div>
         <div className='flex items-center gap-3'>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className='flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium'
-          >
-            <Upload size={16} />
-            Import CSV
-          </button>
+          {crashes.length > 0 && (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className='flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium'
+            >
+              <Upload size={16} />
+              Import CSV
+            </button>
+          )}
           <div className='relative w-80'>
             <Search
               className='absolute left-3 top-1/2 -translate-y-1/2 text-gray-400'
@@ -1212,91 +1217,113 @@ const CrashDashboard = () => {
       </div>
 
       {/* Recent Crashes */}
-      <div className='bg-white rounded-xl border border-gray-200 shadow-sm'>
-        <div className='p-6 border-b border-gray-100'>
-          <div className='flex items-center justify-between'>
-            <div>
-              <h2 className='text-lg font-semibold text-gray-900'>
-                Recent Crashes
-              </h2>
-              <p className='text-sm text-gray-500 mt-1'>
-                Latest reported issues from your SDK
-              </p>
-            </div>
-            <button
-              onClick={() => setCurrentView("crashes")}
-              className='text-sm text-blue-600 hover:text-blue-700 font-medium'
-            >
-              View all
-            </button>
+      {/* Recent Crashes or Empty State */}
+      {crashes.length === 0 ? (
+        <div className='bg-white rounded-xl border border-dashed border-gray-300 p-12 text-center'>
+          <div className='mx-auto w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4'>
+            <Upload className='text-gray-400' size={24} />
           </div>
+          <h3 className='text-lg font-semibold text-gray-900 mb-1'>
+            No crashes loaded yet
+          </h3>
+          <p className='text-sm text-gray-500 mb-6 max-w-sm mx-auto'>
+            Upload a CSV file to populate the dashboard with crash data and start investigating.
+          </p>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className='inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-all font-medium'
+          >
+            <Upload size={16} />
+            Import CSV
+          </button>
         </div>
+      ) : (
+        <div className='bg-white rounded-xl border border-gray-200 shadow-sm'>
+          <div className='p-6 border-b border-gray-100'>
+            <div className='flex items-center justify-between'>
+              <div>
+                <h2 className='text-lg font-semibold text-gray-900'>
+                  Recent Crashes
+                </h2>
+                <p className='text-sm text-gray-500 mt-1'>
+                  Latest reported issues from your SDK
+                </p>
+              </div>
+              <button
+                onClick={() => setCurrentView("crashes")}
+                className='text-sm text-blue-600 hover:text-blue-700 font-medium'
+              >
+                View all
+              </button>
+            </div>
+          </div>
 
-        <div className='divide-y divide-gray-100'>
-          {recentCrashes.map((crash) => (
-            <div
-              key={crash.id}
-              className='p-6 hover:bg-gray-50 transition-colors group'
-            >
-              <div className='flex items-start justify-between'>
-                <div className='flex-1'>
-                  <div className='flex items-center gap-3 mb-3'>
-                    <span className='font-mono text-sm font-semibold text-gray-900'>
-                      {crash.id}
-                    </span>
-                    <span
-                      className={`px-2.5 py-1 text-xs font-medium rounded-full ${getSeverityStyles(
-                        crash.severity
-                      )}`}
-                    >
-                      {crash.severity}
-                    </span>
-                    <span
-                      className={`px-2.5 py-1 text-xs font-medium rounded-full ${getStatusStyles(
-                        crash.status
-                      )}`}
-                    >
-                      {crash.status}
-                    </span>
+          <div className='divide-y divide-gray-100'>
+            {recentCrashes.map((crash) => (
+              <div
+                key={crash.id}
+                className='p-6 hover:bg-gray-50 transition-colors group'
+              >
+                <div className='flex items-start justify-between'>
+                  <div className='flex-1'>
+                    <div className='flex items-center gap-3 mb-3'>
+                      <span className='font-mono text-sm font-semibold text-gray-900'>
+                        {crash.id}
+                      </span>
+                      <span
+                        className={`px-2.5 py-1 text-xs font-medium rounded-full ${getSeverityStyles(
+                          crash.severity
+                        )}`}
+                      >
+                        {crash.severity}
+                      </span>
+                      <span
+                        className={`px-2.5 py-1 text-xs font-medium rounded-full ${getStatusStyles(
+                          crash.status
+                        )}`}
+                      >
+                        {crash.status}
+                      </span>
+                    </div>
+
+                    <p className='text-sm text-gray-600 mb-2 line-clamp-1'>
+                      {crash.exceptionName} in {crash.crashLocation.symbolName}
+                    </p>
+
+                    <div className='flex items-center gap-4 text-xs text-gray-500'>
+                      <span className='flex items-center gap-1'>
+                        <Users size={12} />
+                        {crash.client}
+                      </span>
+                      <span>•</span>
+                      <span className='flex items-center gap-1'>
+                        <Clock size={12} />
+                        {formatTimestamp(crash.timestamp, useUTC)}
+                      </span>
+                    </div>
                   </div>
 
-                  <p className='text-sm text-gray-600 mb-2 line-clamp-1'>
-                    {crash.exceptionName} in {crash.crashLocation.symbolName}
-                  </p>
-
-                  <div className='flex items-center gap-4 text-xs text-gray-500'>
-                    <span className='flex items-center gap-1'>
-                      <Users size={12} />
-                      {crash.client}
-                    </span>
-                    <span>•</span>
-                    <span className='flex items-center gap-1'>
-                      <Clock size={12} />
-                      {formatTimestamp(crash.timestamp, useUTC)}
-                    </span>
+                  <div className='flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity'>
+                    <button
+                      onClick={() => setPeekCrash(crash)}
+                      className='p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors'
+                      title='Quick view'
+                    >
+                      <Eye size={16} />
+                    </button>
+                    <button
+                      onClick={() => setSelectedCrash(crash)}
+                      className='px-3 py-1.5 text-sm font-medium text-gray-700 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors'
+                    >
+                      Details
+                    </button>
                   </div>
-                </div>
-
-                <div className='flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity'>
-                  <button
-                    onClick={() => setPeekCrash(crash)}
-                    className='p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors'
-                    title='Quick view'
-                  >
-                    <Eye size={16} />
-                  </button>
-                  <button
-                    onClick={() => setSelectedCrash(crash)}
-                    className='px-3 py-1.5 text-sm font-medium text-gray-700 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors'
-                  >
-                    Details
-                  </button>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 
