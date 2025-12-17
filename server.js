@@ -53,6 +53,8 @@ app.post('/symbolicate', (req, res) => {
             results[addr] = lines[idx] || 'Unresolved';
         });
 
+        console.log(`✅ Symbolicated ${addresses.length} addresses for SDK ${sdkVersion}`);
+
         res.json({ results });
     });
 });
