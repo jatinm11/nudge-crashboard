@@ -14,7 +14,7 @@ app.use(express.json());
 const DSYM_DIR = path.resolve('src/dSYM_files');
 
 app.post('/symbolicate', (req, res) => {
-    const { sdkVersion, addresses, loadAddress } = req.body;
+    const { sdkVersion, addresses, loadAddress, uuid: expectedUUID } = req.body;
 
     if (!sdkVersion || !addresses || !Array.isArray(addresses)) {
         return res.status(400).json({ error: 'Missing sdkVersion or addresses array' });
@@ -29,34 +29,75 @@ app.post('/symbolicate', (req, res) => {
         return res.status(404).json({ error: `dSYM not found for version ${sdkVersion}`, searchedPath: binaryPath });
     }
 
-    // Construct atos command
-    // atos -arch arm64 -o <binary> [-l <loadAddress>] <addr1> <addr2> ...
-    const addrArgs = addresses.join(' ');
-    const loadArg = loadAddress ? `-l ${loadAddress}` : '';
-    const cmd = `atos -arch arm64 -o "${binaryPath}" ${loadArg} ${addrArgs}`;
+    // Validate UUID if provided
+    if (expectedUUID) {
+        // Run dwarfdump to get local UUID
+        const checkCmd = `dwarfdump --uuid "${binaryPath}"`;
+        exec(checkCmd, (err, stdout) => {
+            if (err) {
+                console.error("dwarfdump error:", err);
+                // Proceed with warning? Or fail? Let's fail safely or just warn meant to be strict
+                // For now, let's just log and continue if dwarfdump fails, but if it succeeds we check.
+            }
 
-    console.log(`Executing: ${cmd}`);
+            // Output format: "UUID: <UUID> (arm64) <path>"
+            // We need to parse strict UUID
+            const match = stdout.match(/UUID: ([0-9A-F-]+) \(/i);
+            if (match && match[1]) {
+                const localUUID = match[1].replace(/-/g, '').toLowerCase();
+                const remoteUUID = expectedUUID.replace(/-/g, '').toLowerCase();
 
-    exec(cmd, (error, stdout, stderr) => {
-        if (error) {
-            console.error(`atos error: ${error.message}`);
-            return res.status(500).json({ error: 'Symbolication failed', details: error.message });
-        }
-        if (stderr) {
-            console.warn(`atos stderr: ${stderr}`);
-        }
-
-        const lines = stdout.trim().split('\n');
-        // Map original address to result
-        const results = {};
-        addresses.forEach((addr, idx) => {
-            results[addr] = lines[idx] || 'Unresolved';
+                if (localUUID !== remoteUUID) {
+                    console.error(`❌ UUID Mismatch! Request: ${remoteUUID}, Local: ${localUUID}`);
+                    return res.status(409).json({
+                        error: 'dSYM UUID Mismatch',
+                        expected: expectedUUID,
+                        found: match[1],
+                        message: "The dSYM file on the server does not match the app binary that crashed. Please upload the correct dSYM."
+                    });
+                } else {
+                    console.log("✅ UUID Verified:", localUUID);
+                    runAtos();
+                }
+            } else {
+                // Could not parse, maybe run atos anyway?
+                runAtos();
+            }
         });
+    } else {
+        runAtos();
+    }
 
-        console.log(`✅ Symbolicated ${addresses.length} addresses for SDK ${sdkVersion}`);
+    function runAtos() {
+        // Construct atos command
+        // atos -arch arm64 -o <binary> [-l <loadAddress>] <addr1> <addr2> ...
+        const addrArgs = addresses.join(' ');
+        const loadArg = loadAddress ? `-l ${loadAddress}` : '';
+        const cmd = `atos -arch arm64 -o "${binaryPath}" ${loadArg} ${addrArgs}`;
 
-        res.json({ results });
-    });
+        console.log(`Executing: ${cmd}`);
+
+        exec(cmd, (error, stdout, stderr) => {
+            if (error) {
+                console.error(`atos error: ${error.message}`);
+                return res.status(500).json({ error: 'Symbolication failed', details: error.message });
+            }
+            if (stderr) {
+                console.warn(`atos stderr: ${stderr}`);
+            }
+
+            const lines = stdout.trim().split('\n');
+            // Map original address to result
+            const results = {};
+            addresses.forEach((addr, idx) => {
+                results[addr] = lines[idx] || 'Unresolved';
+            });
+
+            console.log(`✅ Symbolicated ${addresses.length} addresses for SDK ${sdkVersion}`);
+
+            res.json({ results });
+        });
+    }
 });
 
 app.listen(port, () => {

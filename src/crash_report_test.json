@@ -1,0 +1,134 @@
+{
+    "exceptionName": "SIGTRAP",
+    "sdkName": "Nudgecore_iOS",
+    "systemInfo": {
+        "osBuild": "23A355",
+        "osVersion": "26.0.1",
+        "architecture": "arm64",
+        "timestamp": "2025-12-19T12:14:45Z"
+    },
+    "signature": "SIGTRAP:___swift_memcpy104_8",
+    "signal": "SIGTRAP",
+    "crashLocation": {
+        "instructionPointer": "0x10325d96c",
+        "symbolName": "___swift_memcpy104_8",
+        "loadAddress": "0x10303c000",
+        "frameIndex": 0,
+        "moduleName": "Nudgecore_iOS",
+        "isSDKFrame": true
+    },
+    "appInfo": {
+        "version": "1",
+        "appBuild": "1",
+        "marketingVersion": "1.0",
+        "appVersion": "1.0",
+        "bundleIdentifier": "com.jatin.CrashReporterTest-PointTwenty",
+        "appBundleID": "com.jatin.CrashReporterTest-PointTwenty"
+    },
+    "state": {
+        "appState": "active",
+        "isMainThread": true,
+        "isLowPowerModeEnabled": false,
+        "orientation": 1
+    },
+    "frames": [
+        {
+            "instructionPointer": "0x10325d96c",
+            "symbolName": "___swift_memcpy104_8",
+            "frameIndex": 0,
+            "moduleName": "Nudgecore_iOS",
+            "isSDKFrame": true
+        },
+        {
+            "instructionPointer": "0x1030baa58",
+            "symbolName": "_block_destroy_helper.54",
+            "frameIndex": 1,
+            "moduleName": "Nudgecore_iOS",
+            "isSDKFrame": true
+        },
+        {
+            "instructionPointer": "0x1cef287ec",
+            "symbolName": "<redacted>",
+            "frameIndex": 2,
+            "moduleName": "libdispatch.dylib",
+            "isSDKFrame": false
+        },
+        {
+            "symbolName": "<redacted>",
+            "instructionPointer": "0x1cef13664",
+            "frameIndex": 3,
+            "moduleName": "libdispatch.dylib",
+            "isSDKFrame": false
+        },
+        {
+            "instructionPointer": "0x1cef26528",
+            "symbolName": "<redacted>",
+            "frameIndex": 4,
+            "moduleName": "libdispatch.dylib",
+            "isSDKFrame": false
+        },
+        {
+            "instructionPointer": "0x1cef251fc",
+            "symbolName": "<redacted>",
+            "frameIndex": 5,
+            "moduleName": "libdispatch.dylib",
+            "isSDKFrame": false
+        },
+        {
+            "symbolName": "<redacted>",
+            "instructionPointer": "0x1cef45a48",
+            "frameIndex": 6,
+            "moduleName": "libdispatch.dylib",
+            "isSDKFrame": false
+        },
+        {
+            "symbolName": "<redacted>",
+            "instructionPointer": "0x1cef1dec8",
+            "frameIndex": 7,
+            "moduleName": "libdispatch.dylib",
+            "isSDKFrame": false
+        },
+        {
+            "symbolName": "__dispatch_main_queue_callback_4CF",
+            "instructionPointer": "0x1cef1de04",
+            "frameIndex": 8,
+            "moduleName": "libdispatch.dylib",
+            "isSDKFrame": false
+        },
+        {
+            "instructionPointer": "0x1975a4520",
+            "symbolName": "<redacted>",
+            "frameIndex": 9,
+            "moduleName": "CoreFoundation",
+            "isSDKFrame": false
+        }
+    ],
+    "exceptionReason": "Terminated by SIGTRAP at 0x10325d96c",
+    "binaryImages": [
+        {
+            "size": 49152,
+            "baseAddress": "0x1029dc000",
+            "name": "CrashReporterTest-PointTwenty",
+            "uuid": "498b9d16c587392d94aa268f81e43c72"
+        },
+        {
+            "size": 3244032,
+            "baseAddress": "0x10303c000",
+            "name": "Nudgecore_iOS",
+            "uuid": "cbc438d3cc373eeca25f5412c196ad5e"
+        }
+    ],
+    "kind": "crash",
+    "symbolication": {
+        "loadAddress": "0x10303c000",
+        "addresses": [
+            "0x10325d96c",
+            "0x1030baa58"
+        ],
+        "sdkVersion": "0.0.21",
+        "uuid": "cbc438d3cc373eeca25f5412c196ad5e"
+    },
+    "sdkVersion": "0.0.21",
+    "sdkFrameCount": 2,
+    "timestamp": "2025-12-19T12:14:49Z"
+}
