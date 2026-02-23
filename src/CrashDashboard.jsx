@@ -67,6 +67,12 @@ const initialCrashes = [
       { ts: "2025-11-06T20:15:42Z", action: "API: /challenge/start 200" },
       { ts: "2025-11-06T20:15:43Z", action: "Crash Triggered" },
     ],
+    frames: [
+      { moduleName: "Nudgecore_iOS", symbolName: "ChallengesUI.clickEvaluater", instructionPointer: "0x104b204d0", isSDKFrame: true, demangledName: "closure #1 in ChallengesUI.clickEvaluater" },
+      { moduleName: "UIKitCore", symbolName: "UIApplication.sendAction", instructionPointer: "0x1850d12e0", isSDKFrame: false },
+      { moduleName: "UIKitCore", symbolName: "UIControl.sendAction", instructionPointer: "0x1850d12e0", isSDKFrame: false },
+      { moduleName: "Nudgecore_iOS", symbolName: "NudgeButton.touchUpInside", instructionPointer: "0x104b20400", isSDKFrame: true, demangledName: "NudgeButton.touchUpInside" },
+    ],
     http: { recentStatusCodes: [200, 200, 500, 200, 503] },
     user: { idHash: "fa82e9b1", region: "US" },
   },
@@ -572,7 +578,11 @@ const parseCSV = (text) => {
 
         // Safely extract instruction pointer or use frames
         let symName = "Unsymbolicated"
-        const frames = data.crashLocation?.frames || data.frames || []
+        const rawFrames = data.crashLocation?.frames || data.frames || []
+        const frames = rawFrames.map(f => ({
+          ...f,
+          isSDKFrame: f.isSDKFrame !== undefined ? f.isSDKFrame : (f.moduleName && (f.moduleName.includes("Nudgecore_iOS") || f.moduleName.includes("CrashReporter")))
+        }))
         // Try to find the first SDK frame
         const sdkFrame = frames.find(f => f.isSDKFrame) || frames[0]
 
@@ -691,7 +701,7 @@ const symbolicateCrashes = async (crashesList, apiUrl) => {
 }
 
 const CrashDashboard = () => {
-  const [crashes, setCrashes] = useState([])
+  const [crashes, setCrashes] = useState(initialCrashes)
   const [currentView, setCurrentView] = useState("home")
   const [selectedClient, setSelectedClient] = useState(null)
   const [selectedCrash, setSelectedCrash] = useState(null)
@@ -1806,6 +1816,7 @@ const CrashDashboard = () => {
   const CrashDetailModal = () => {
     if (!selectedCrash) return null
     const c = selectedCrash
+    const [selectedFrame, setSelectedFrame] = useState(null)
 
     return (
       <div className='fixed inset-0 z-50 flex items-center justify-center'>
@@ -1893,15 +1904,19 @@ const CrashDashboard = () => {
               </div>
             </Section>
 
-            {/* Crash Location */}
+
+
             <Section title='Crash Location' icon={AlertCircle}>
               <div className='bg-red-50 border border-red-200 rounded-xl p-4 space-y-3'>
                 <KVMono k='Module' v={c.crashLocation.moduleName} />
-                <KVMono k='Symbol' v={c.crashLocation.symbolName} />
-                {c.crashLocation.instructionPointer && c.crashLocation.symbolName !== c.crashLocation.instructionPointer && (
-                  <KVMono k='Address' v={c.crashLocation.instructionPointer} small />
+                <KVMono k='Symbol' v={selectedFrame?.symbolName || c.crashLocation.symbolName} />
+                <KVMono k='File' v={(selectedFrame ? parseLocation(selectedFrame.demangledName || selectedFrame.symbolName)?.filename : parseLocation(c.crashLocation.demangledName || c.crashLocation.symbolName)?.filename) || "-"} />
+                <KVMono k='Line' v={(selectedFrame ? parseLocation(selectedFrame.demangledName || selectedFrame.symbolName)?.line : parseLocation(c.crashLocation.demangledName || c.crashLocation.symbolName)?.line) || "-"} />
+
+                {(selectedFrame?.instructionPointer || (c.crashLocation.instructionPointer && c.crashLocation.symbolName !== c.crashLocation.instructionPointer)) && (
+                  <KVMono k='Address' v={selectedFrame?.instructionPointer || c.crashLocation.instructionPointer} small />
                 )}
-                <KVMono k='Demangled' v={c.crashLocation.demangledName} small />
+
 
                 <div className="pt-2 mt-2 border-t border-red-200">
                   <p className="text-xs text-red-600 mb-1.5 font-medium">Manual Symbolication (Load Address)</p>
@@ -1924,6 +1939,15 @@ const CrashDashboard = () => {
               </div>
             </Section>
 
+
+
+            {/* Source Code Viewer */}
+            {selectedFrame && (
+              <div className="mb-6">
+                <SourceCodeViewer frame={selectedFrame} sdkVersion={c.sdkVersion} />
+              </div>
+            )}
+
             {/* Frames */}
             {c.frames && c.frames.length > 0 && (
               <Section title='Stack Frames' icon={Layers}>
@@ -1940,7 +1964,11 @@ const CrashDashboard = () => {
                       </thead>
                       <tbody className='divide-y divide-gray-200'>
                         {c.frames.map((frame, i) => (
-                          <tr key={i} className={`hover:bg-gray-100 ${frame.isSDKFrame ? "bg-blue-50/50" : ""}`}>
+                          <tr
+                            key={i}
+                            onClick={() => frame.isSDKFrame && setSelectedFrame(frame)}
+                            className={`hover:bg-gray-100 cursor-pointer ${frame.isSDKFrame ? "bg-blue-50/50" : ""} ${selectedFrame === frame ? "bg-blue-100 ring-1 ring-blue-500" : ""}`}
+                          >
                             <td className='px-4 py-2 text-gray-500 font-mono text-xs'>{i}</td>
                             <td className='px-4 py-2 font-medium text-gray-900'>{frame.moduleName || "?"}</td>
                             <td className='px-4 py-2 font-mono text-xs text-gray-600'>{frame.instructionPointer}</td>
@@ -1973,24 +2001,6 @@ const CrashDashboard = () => {
               </div>
             </Section>
 
-            {/* HTTP status codes */}
-            <Section title='Recent HTTP status codes' icon={FileText}>
-              <div className='flex gap-2 flex-wrap'>
-                {(c.http?.recentStatusCodes || []).map((code, i) => (
-                  <span
-                    key={i}
-                    className={`text-xs px-2 py-1 rounded-md border ${code >= 500
-                      ? "bg-red-50 border-red-200 text-red-700"
-                      : code >= 400
-                        ? "bg-amber-50 border-amber-200 text-amber-700"
-                        : "bg-green-50 border-green-200 text-green-700"
-                      }`}
-                  >
-                    {code}
-                  </span>
-                ))}
-              </div>
-            </Section>
 
             {/* Actions */}
             <div className='flex gap-3 pt-2'>
@@ -2284,5 +2294,120 @@ const HeatmapCard = ({ title, model }) => {
     </div>
   )
 }
+// Helper component for Source Code
+const SourceCodeViewer = ({ frame, sdkVersion }) => {
+  const [source, setSource] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [repoOwner, setRepoOwner] = useState("nudgenow") // Default suggestion
+  const [repoName, setRepoName] = useState("nudge-sdk-ios") // Default suggestion
 
+  // Parse filename and line from symbol name
+  const location = useMemo(() => parseLocation(frame.demangledName || frame.symbolName), [frame])
+
+  const handleFetch = async () => {
+    if (!location) return
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('http://localhost:3001/fetch-source', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: location.filename,
+          line: location.line,
+          sdkVersion: sdkVersion,
+          repoOwner,
+          repoName
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to fetch source")
+      setSource(data)
+    } catch (err) {
+      console.error(err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!location) return null
+
+  return (
+    <div className="mt-4 p-4 bg-neutral-900 rounded-lg border border-neutral-800">
+      <h4 className="text-sm font-medium text-neutral-300 mb-2 flex justify-between items-center">
+        <span className="flex items-center gap-2">
+          <FileText size={14} />
+          Source Preview: <span className="text-blue-400 font-mono">{location.filename}:{location.line}</span>
+        </span>
+
+        {!source && (
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Owner"
+              value={repoOwner}
+              onChange={e => setRepoOwner(e.target.value)}
+              className="bg-neutral-800 text-xs px-2 py-1 rounded border border-neutral-700 w-24 text-white"
+            />
+            <input
+              type="text"
+              placeholder="Repo Name"
+              value={repoName}
+              onChange={e => setRepoName(e.target.value)}
+              className="bg-neutral-800 text-xs px-2 py-1 rounded border border-neutral-700 w-32 text-white"
+            />
+            <button
+              onClick={handleFetch}
+              disabled={loading}
+              className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-3 py-1 rounded transition-colors disabled:opacity-50"
+            >
+              {loading ? "Fetching..." : "Fetch Code"}
+            </button>
+          </div>
+        )}
+      </h4>
+
+      {error && (
+        <div className="text-red-400 text-xs bg-red-900/20 p-2 rounded border border-red-900/30">
+          Failed to load source: {error}. <br />
+          Ensure <code>GITHUB_TOKEN</code> is set in <code>.env</code> on the server.
+        </div>
+      )}
+
+      {source && (
+        <div className="bg-neutral-950 rounded p-3 overflow-x-auto border border-neutral-800">
+          <div className="text-xs text-neutral-500 mb-2 font-mono flex justify-between">
+            <span>{source.filePath} @ {source.ref}</span>
+            <button onClick={() => setSource(null)} className="hover:text-neutral-300">Close</button>
+          </div>
+          <pre className="font-mono text-xs leading-5 text-gray-300">
+            {source.snippet.split('\n').map((line, i) => {
+              const lineNum = source.startLine + i
+              const isTarget = lineNum === source.targetLine
+              return (
+                <div key={i} className={`${isTarget ? "bg-blue-500/20 text-blue-200 w-full inline-block" : "text-neutral-400"}`}>
+                  <span className="select-none text-neutral-600 w-8 inline-block text-right mr-3">{lineNum}</span>
+                  {line}
+                </div>
+              )
+            })}
+          </pre>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function parseLocation(symbolString) {
+  if (!symbolString) return null
+  // Matches "(ChallengesUI.swift:519)" or "(File.m:123)"
+  // More robust: look for (filename:line) pattern at the end
+  const match = symbolString.match(/\(([^:)]+):(\d+)\)/)
+  if (match) {
+    return { filename: match[1], line: parseInt(match[2]) }
+  }
+  return null
+}
 export default CrashDashboard

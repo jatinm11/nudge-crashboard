@@ -1,6 +1,7 @@
 import UIKit
 @_implementationOnly import CrashReporter
 import MachO
+import SystemConfiguration
 
 final class SDKCrashReporter {
     
@@ -23,8 +24,10 @@ final class SDKCrashReporter {
     // Exception handler chaining
     static var previousExceptionHandler: (@convention(c) (NSException) -> Void)?
     
-    // Heartbeat timer
-    private var heartbeatTimer: Timer?
+
+    
+    // Serial queue for IO and processing
+    private let queue = DispatchQueue(label: "com.nudge.sdk.crashreporter", qos: .utility)
     
     // MARK: - Initialization
     
@@ -46,11 +49,13 @@ final class SDKCrashReporter {
         }
         
         // Detect Firebase Crashlytics
-        firebaseDetected = isFirebaseCrashlyticsPresent()
-        
-        if firebaseDetected {
-            Logger.info("⚠️ Firebase Crashlytics detected")
+        if isFirebaseCrashlyticsPresent() {
+            Logger.info("⚠️ Firebase Crashlytics detected - will chain exception handlers")
+            self.firebaseDetected = true
         }
+        
+        // Enable battery monitoring
+        UIDevice.current.isBatteryMonitoringEnabled = true
         
         // Setup NSException handler first (this always works)
         setupExceptionHandler()
@@ -61,11 +66,12 @@ final class SDKCrashReporter {
             Logger.error("⚠️ PLCrashReporter setup failed - relying on exception handler")
         }
         
-        // Setup periodic stack trace logging for SDK code
-        setupPeriodicHealthCheck()
+        // Process any pending crash from previous run (IN BACKGROUND)
+        queue.async { [weak self] in
+            self?.processPendingCrashReport()
+        }
         
-        // Process any pending crash from previous run
-        processPendingCrashReport()
+
     }
     
     /// Setup PLCrashReporter with fallback logic
@@ -137,24 +143,32 @@ final class SDKCrashReporter {
         
         Logger.info("🔴 SDK Exception detected: \(exception.name.rawValue)")
         
+        // Collect info
+        let sysInfo = collectSystemInfo()
+        let appInfo = collectAppInfo()
+        
         // Build crash report
         var report: [String: Any] = [
             "timestamp": ISO8601DateFormatter().string(from: Date()),
             "kind": "exception",
             "sdkName": sdkName,
             "sdkVersion": sdkVersion,
+            "osVersion": sysInfo["osVersion"] as? String ?? "unknown",
+            "appVersion": appInfo["version"] as? String ?? "unknown",
+            "architecture": "arm64",
             "exceptionName": exception.name.rawValue,
             "exceptionReason": exception.reason ?? "No reason provided",
             "stackTrace": stackTrace,
             "returnAddresses": exception.callStackReturnAddresses,
             "signature": buildExceptionSignature(exception, stackTrace: stackTrace),
             "userInfo": exception.userInfo as Any,
-            "systemInfo": collectSystemInfo(),
-            "appInfo": collectAppInfo(),
+            "device": sysInfo,
+            "user": collectUserInfo(),
+            "appInfo": appInfo,
             "binaryImages": captureBinaryImages(),
             "captureMethod": "NSExceptionHandler"
         ]
-        
+                
         
         if let loadAddr = getLoadAddress(for: "Nudgecore_iOS") {
             var location: [String: Any] = ["moduleName": "Nudgecore_iOS"]
@@ -240,116 +254,7 @@ final class SDKCrashReporter {
         return false
     }
     
-    /// Setup periodic health check to detect crashes that weren't caught
-    private func setupPeriodicHealthCheck() {
-        // 1. Check for stale heartbeat first (from previous run)
-        checkForStaleCrash()
-        
-        // 2. Start monitoring
-        startHeartbeatMonitoring()
-        
-        // 3. Register lifecycle observers to handle background/termination
-        NotificationCenter.default.addObserver(self, selector: #selector(handleAppForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(handleAppBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(handleAppTermination), name: UIApplication.willTerminateNotification, object: nil)
-    }
-    
-    // MARK: - Heartbeat Lifecycle
-    
-    private func startHeartbeatMonitoring() {
-        if !Thread.isMainThread {
-            DispatchQueue.main.async { [weak self] in
-                self?.startHeartbeatMonitoring()
-            }
-            return
-        }
-        
-        updateHeartbeat()
-        
-        // Schedule timer to update every 60 seconds
-        stopHeartbeatTimer()
-        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: true) { [weak self] _ in
-            self?.updateHeartbeat()
-        }
-    }
-    
-    private func stopHeartbeatTimer() {
-        heartbeatTimer?.invalidate()
-        heartbeatTimer = nil
-    }
-    
-    @objc private func handleAppForeground() {
-        // App coming back to foreground: restart heartbeat
-        startHeartbeatMonitoring()
-    }
-    
-    @objc private func handleAppBackground() {
-        // App going to background: stop heartbeat and DELETE file
-        // We assume background kills (OOM, etc.) are not SDK crashes we want to catch via this method
-        stopHeartbeatTimer()
-        deleteHeartbeatFile()
-    }
-    
-    @objc private func handleAppTermination() {
-        // Clean exit: delete file
-        stopHeartbeatTimer()
-        deleteHeartbeatFile()
-    }
-    
-    private func updateHeartbeat() {
-        let heartbeatURL = heartbeatFileURL()
-        let heartbeat: [String: Any] = [
-            "lastActive": ISO8601DateFormatter().string(from: Date()),
-            "sdkVersion": sdkVersion
-        ]
-        
-        if let data = try? JSONSerialization.data(withJSONObject: heartbeat) {
-            try? data.write(to: heartbeatURL)
-        }
-    }
-    
-    private func deleteHeartbeatFile() {
-        let url = heartbeatFileURL()
-        try? FileManager.default.removeItem(at: url)
-    }
-    
-    /// Check if last session ended in a crash (no clean shutdown)
-    private func checkForStaleCrash() {
-        let heartbeatURL = heartbeatFileURL()
-        
-        guard let data = try? Data(contentsOf: heartbeatURL),
-              let heartbeat = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let lastActiveString = heartbeat["lastActive"] as? String,
-              let lastActive = ISO8601DateFormatter().date(from: lastActiveString) else {
-            return
-        }
-        
-        // If file exists, it means we didn't exit clean or background cleanly
-        // We can be stricter now: any existence implies crash, but keeping 5 min buffer is safe
-        // Actually, if we delete on BG, existence means CRASHED while FOREGROUND.
-        // So checking time is less important, but good for sanity.
-        
-        // Reporting
-        let report: [String: Any] = [
-            "timestamp": ISO8601DateFormatter().string(from: Date()),
-            "kind": "suspected_crash",
-            "sdkName": sdkName,
-            "sdkVersion": sdkVersion,
-            "lastActive": lastActiveString,
-            "note": "Crash detected via stale heartbeat - likely crashed while active",
-            "captureMethod": "HeartbeatMonitor"
-        ]
-        
-        saveCrashReport(report)
-        
-        // Remove the stale file so we don't report it again
-        deleteHeartbeatFile()
-    }
-    
-    private func heartbeatFileURL() -> URL {
-        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        return dir.appendingPathComponent("sdk_heartbeat.json")
-    }
+
     
     // MARK: - Crash Report Processing
     
@@ -373,7 +278,7 @@ final class SDKCrashReporter {
         if let processedReport = analyzeCrashReport(report) {
             saveCrashReport(processedReport)
         }
-        
+                
         // Always purge after processing
         reporter.purgePendingCrashReport()
     }
@@ -415,33 +320,32 @@ final class SDKCrashReporter {
         let exceptionInfo = extractExceptionInfo(report)
         let signature = buildSignature(exception: exceptionInfo.name, crashLocation: crashLocation)
         
+        
         #if canImport(UIKit)
-        let appState: String = {
-            guard Thread.isMainThread else { return "unknown" }
-            guard let app = UIApplication.value(forKey: "sharedApplication") as? UIApplication else {
-                return "unknown"
-            }
-            switch app.applicationState {
-            case .active: return "active"
-            case .inactive: return "inactive"
-            case .background: return "background"
-            @unknown default: return "unknown"
-            }
-        }()
-        let orientation: Int = {
-            guard Thread.isMainThread else { return -1 }
-            return UIDevice.current.orientation.rawValue
-        }()
+        let appState = "unknown"
+        let orientation = UIDevice.current.orientation.isLandscape ? 1 : 0
         #else
         let appState = "unknown"
         let orientation = -1
         #endif
+        
+        let systemInfo = extractSystemInfo(report)
+        let appInfo = extractAppInfo(report)
+        
+        // Mix-in live static data for device model (since it doesn't change)
+        var deviceData = systemInfo
+        deviceData["model"] = getHardwareModel()
+        
+        let userData = collectUserInfo()
         
         var fullReport: [String: Any] = [
             "timestamp": ISO8601DateFormatter().string(from: Date()),
             "kind": "crash",
             "sdkName": sdkName,
             "sdkVersion": sdkVersion,
+            "osVersion": systemInfo["osVersion"] as? String ?? "unknown", // Top Level
+            "appVersion": appInfo["appVersion"] as? String ?? "unknown",  // Top Level
+            "architecture": systemInfo["architecture"] as? String ?? "unknown", // Top Level
             "exceptionName": exceptionInfo.name,
             "exceptionReason": exceptionInfo.reason,
             "signal": exceptionInfo.signal ?? "N/A",
@@ -449,11 +353,12 @@ final class SDKCrashReporter {
             "crashLocation": crashLocation ?? [:],
             "frames": frames.prefix(10).map { $0 },
             "sdkFrameCount": sdkFrames.count,
-            "systemInfo": extractSystemInfo(report),
-            "appInfo": extractAppInfo(report),
+            "device": deviceData,
+            "user": userData,
+            "appInfo": appInfo,
             "binaryImages": extractBinaryImages(report),
             "state": [
-                "isMainThread": Thread.isMainThread,
+                "isMainThread": crashedThread.threadNumber == 0,
                 "isLowPowerModeEnabled": ProcessInfo.processInfo.isLowPowerModeEnabled,
                 "orientation": orientation,
                 "appState": appState
@@ -468,8 +373,7 @@ final class SDKCrashReporter {
             ]
             
             // Extract UUID for the SDK image
-            if let imageIndex = crashLocation?["frameIndex"] as? Int, // This might not be right way to get image, better to lookup by module name
-               let moduleName = crashLocation?["moduleName"] as? String,
+            if let moduleName = crashLocation?["moduleName"] as? String,
                let image = report.images.first(where: {
                    (($0 as? PLCrashReportBinaryImageInfo)?.imageName as NSString?)?.lastPathComponent == moduleName
                }) as? PLCrashReportBinaryImageInfo,
@@ -787,9 +691,21 @@ final class SDKCrashReporter {
     private func collectSystemInfo() -> [String: Any] {
         return [
             "osVersion": UIDevice.current.systemVersion,
-            "deviceModel": UIDevice.current.model,
+            "model": getHardwareModel(), // Renamed to 'model' for Dashboard consistency
             "systemName": UIDevice.current.systemName,
-            "timestamp": ISO8601DateFormatter().string(from: Date())
+            "timestamp": ISO8601DateFormatter().string(from: Date()),
+            "freeRAMMB": getFreeRAM(),
+            "freeStorageMB": getFreeDiskSpace(),
+            "batteryLevel": UIDevice.current.isBatteryMonitoringEnabled ? UIDevice.current.batteryLevel : -1.0,
+            "networkType": getNetworkType(),
+            "orientation": UIDevice.current.orientation.isLandscape ? "Landscape" : "Portrait"
+        ]
+    }
+    
+    private func collectUserInfo() -> [String: Any] {
+        return [
+            "region": Locale.current.regionCode ?? "Unknown",
+            "idHash": (UIDevice.current.identifierForVendor?.uuidString ?? "unknown").prefix(8) // Simulated hash
         ]
     }
     
@@ -803,6 +719,74 @@ final class SDKCrashReporter {
             "version": version,
             "build": build
         ]
+    }
+    
+    // MARK: - Device Metadata Helpers
+    
+    private func getHardwareModel() -> String {
+        var size: Int = 0
+        sysctlbyname("hw.machine", nil, &size, nil, 0)
+        var machine = [CChar](repeating: 0, count: size)
+        sysctlbyname("hw.machine", &machine, &size, nil, 0)
+        return String(cString: machine)
+    }
+    
+    private func getFreeRAM() -> Double {
+        var vmStats = vm_statistics64()
+        var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size)
+        
+        let result = withUnsafeMutablePointer(to: &vmStats) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                host_statistics64(mach_host_self(), HOST_VM_INFO, $0, &count)
+            }
+        }
+        
+        if result == KERN_SUCCESS {
+             let pageSize = vm_kernel_page_size
+             let free = Double(vmStats.free_count) * Double(pageSize)
+             return free / 1024 / 1024 // MB
+        }
+        return 0
+    }
+    
+    private func getFreeDiskSpace() -> Double {
+        if let space = try? URL(fileURLWithPath: NSHomeDirectory() as String)
+            .resourceValues(forKeys: [URLResourceKey.volumeAvailableCapacityForImportantUsageKey])
+            .volumeAvailableCapacityForImportantUsage {
+            return Double(space) / 1024 / 1024 // MB
+        }
+        return 0
+    }
+    
+    private func getNetworkType() -> String {
+        var zeroAddress = sockaddr_in()
+        zeroAddress.sin_len = UInt8(MemoryLayout.size(ofValue: zeroAddress))
+        zeroAddress.sin_family = sa_family_t(AF_INET)
+        
+        guard let defaultRouteReachability = withUnsafePointer(to: &zeroAddress, {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                SCNetworkReachabilityCreateWithAddress(nil, $0)
+            }
+        }) else {
+            return "Unknown"
+        }
+        
+        var flags = SCNetworkReachabilityFlags()
+        if !SCNetworkReachabilityGetFlags(defaultRouteReachability, &flags) {
+            return "Unknown"
+        }
+        
+        let isReachable = flags.contains(.reachable)
+        let needsConnection = flags.contains(.connectionRequired)
+        
+        if isReachable && !needsConnection {
+            if flags.contains(.isWWAN) {
+                return "Cellular"
+            }
+            return "WiFi"
+        }
+        
+        return "No Connection"
     }
     
     private func extractSystemInfo(_ report: PLCrashReport) -> [String: Any] {
@@ -931,7 +915,7 @@ final class SDKCrashReporter {
     // MARK: - Persistence
     
     private func saveCrashReport(_ report: [String: Any]) {
-        let url = crashReportURL()
+        guard let url = crashReportURL() else { return }
         let sanitized = sanitizeForJSON(report)
         
         guard let data = try? JSONSerialization.data(withJSONObject: sanitized, options: .prettyPrinted) else {
@@ -965,8 +949,10 @@ final class SDKCrashReporter {
         }
     }
     
-    private func crashReportURL() -> URL {
-        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+    private func crashReportURL() -> URL? {
+        guard let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return nil
+        }
         return dir.appendingPathComponent(crashReportFile)
     }
     
@@ -974,7 +960,7 @@ final class SDKCrashReporter {
     
     func getLastCrashReport() -> [String: Any]? {
         
-        let url = crashReportURL()
+        guard let url = crashReportURL() else { return nil }
         
         guard let data = try? Data(contentsOf: url), let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
@@ -986,12 +972,10 @@ final class SDKCrashReporter {
     }
     
     func clearLastCrashReport() {
-        let url = crashReportURL()
+        guard let url = crashReportURL() else { return }
         try? FileManager.default.removeItem(at: url)
         
-        // Also clear heartbeat
-        let heartbeatURL = heartbeatFileURL()
-        try? FileManager.default.removeItem(at: heartbeatURL)
+
     }
     
     func sendLastCrashReport(completion: @escaping (Result<Void, Error>) -> Void) {
@@ -1059,3 +1043,5 @@ private func sdkExceptionHandler(_ exception: NSException) {
         previousHandler(exception)
     }
 }
+
+

@@ -1,134 +1,150 @@
 {
-    "exceptionName": "SIGTRAP",
-    "sdkName": "Nudgecore_iOS",
-    "systemInfo": {
-        "osBuild": "23A355",
-        "osVersion": "26.0.1",
-        "architecture": "arm64",
-        "timestamp": "2025-12-19T12:14:45Z"
-    },
-    "signature": "SIGTRAP:___swift_memcpy104_8",
-    "signal": "SIGTRAP",
-    "crashLocation": {
-        "instructionPointer": "0x10325d96c",
-        "symbolName": "___swift_memcpy104_8",
-        "loadAddress": "0x10303c000",
-        "frameIndex": 0,
-        "moduleName": "Nudgecore_iOS",
-        "isSDKFrame": true
-    },
-    "appInfo": {
-        "version": "1",
-        "appBuild": "1",
-        "marketingVersion": "1.0",
-        "appVersion": "1.0",
-        "bundleIdentifier": "com.jatin.CrashReporterTest-PointTwenty",
-        "appBundleID": "com.jatin.CrashReporterTest-PointTwenty"
-    },
-    "state": {
-        "appState": "active",
-        "isMainThread": true,
-        "isLowPowerModeEnabled": false,
-        "orientation": 1
-    },
-    "frames": [
-        {
-            "instructionPointer": "0x10325d96c",
-            "symbolName": "___swift_memcpy104_8",
-            "frameIndex": 0,
-            "moduleName": "Nudgecore_iOS",
-            "isSDKFrame": true
-        },
-        {
-            "instructionPointer": "0x1030baa58",
-            "symbolName": "_block_destroy_helper.54",
-            "frameIndex": 1,
-            "moduleName": "Nudgecore_iOS",
-            "isSDKFrame": true
-        },
-        {
-            "instructionPointer": "0x1cef287ec",
-            "symbolName": "<redacted>",
-            "frameIndex": 2,
-            "moduleName": "libdispatch.dylib",
-            "isSDKFrame": false
-        },
-        {
-            "symbolName": "<redacted>",
-            "instructionPointer": "0x1cef13664",
-            "frameIndex": 3,
-            "moduleName": "libdispatch.dylib",
-            "isSDKFrame": false
-        },
-        {
-            "instructionPointer": "0x1cef26528",
-            "symbolName": "<redacted>",
-            "frameIndex": 4,
-            "moduleName": "libdispatch.dylib",
-            "isSDKFrame": false
-        },
-        {
-            "instructionPointer": "0x1cef251fc",
-            "symbolName": "<redacted>",
-            "frameIndex": 5,
-            "moduleName": "libdispatch.dylib",
-            "isSDKFrame": false
-        },
-        {
-            "symbolName": "<redacted>",
-            "instructionPointer": "0x1cef45a48",
-            "frameIndex": 6,
-            "moduleName": "libdispatch.dylib",
-            "isSDKFrame": false
-        },
-        {
-            "symbolName": "<redacted>",
-            "instructionPointer": "0x1cef1dec8",
-            "frameIndex": 7,
-            "moduleName": "libdispatch.dylib",
-            "isSDKFrame": false
-        },
-        {
-            "symbolName": "__dispatch_main_queue_callback_4CF",
-            "instructionPointer": "0x1cef1de04",
-            "frameIndex": 8,
-            "moduleName": "libdispatch.dylib",
-            "isSDKFrame": false
-        },
-        {
-            "instructionPointer": "0x1975a4520",
-            "symbolName": "<redacted>",
-            "frameIndex": 9,
-            "moduleName": "CoreFoundation",
-            "isSDKFrame": false
+    "app": "CrashReporterTest-PointTwenty",
+    "msg": "",
+    "subCat": "Core",
+    "d": {
+        "Payload": {
+            "timestamp": "2025-12-29T07:59:29Z",
+            "binaryImages": [
+                {
+                    "size": 49152,
+                    "baseAddress": "0x104eb4000",
+                    "name": "CrashReporterTest-PointTwenty",
+                    "uuid": "f2b493f966423f5782ab9969a8f9ccfa"
+                },
+                {
+                    "size": 3260416,
+                    "baseAddress": "0x10519c000",
+                    "name": "Nudgecore_iOS",
+                    "uuid": "e1378cfd6ae636d1984a47993376cf7c"
+                }
+            ],
+            "kind": "crash",
+            "appInfo": {
+                "appBundleID": "com.jatin.CrashReporterTest-PointTwenty",
+                "appBuild": "1",
+                "marketingVersion": "1.0",
+                "appVersion": "1.0",
+                "bundleIdentifier": "com.jatin.CrashReporterTest-PointTwenty",
+                "version": "1"
+            },
+            "user": {
+                "region": "IN",
+                "idHash": "F9162CAC"
+            },
+            "signal": "SIGTRAP",
+            "exceptionName": "SIGTRAP",
+            "state": {
+                "appState": "unknown",
+                "isMainThread": true,
+                "isLowPowerModeEnabled": false,
+                "orientation": 0
+            },
+            "symbolication": {
+                "loadAddress": "0x10519c000",
+                "addresses": [
+                    "0x1053c17e0",
+                    "0x10521cf20"
+                ],
+                "sdkVersion": "0.0.22",
+                "uuid": "e1378cfd6ae636d1984a47993376cf7c"
+            },
+            "crashLocation": {
+                "symbolName": "___swift_memcpy104_8",
+                "instructionPointer": "0x1053c17e0",
+                "loadAddress": "0x10519c000",
+                "frameIndex": 0,
+                "moduleName": "Nudgecore_iOS",
+                "isSDKFrame": true
+            },
+            "sdkName": "Nudgecore_iOS",
+            "sdkFrameCount": 2,
+            "device": {
+                "osBuild": "23A355",
+                "model": "iPhone18,4",
+                "timestamp": "2025-12-29T07:58:10Z",
+                "osVersion": "26.0.1",
+                "architecture": "arm64"
+            },
+            "sdkVersion": "0.0.22",
+            "architecture": "arm64",
+            "osVersion": "26.0.1",
+            "signature": "SIGTRAP:___swift_memcpy104_8",
+            "appVersion": "1.0",
+            "exceptionReason": "Terminated by SIGTRAP at 0x1053c17e0",
+            "frames": [
+                {
+                    "symbolName": "___swift_memcpy104_8",
+                    "instructionPointer": "0x1053c17e0",
+                    "frameIndex": 0,
+                    "moduleName": "Nudgecore_iOS",
+                    "isSDKFrame": true
+                },
+                {
+                    "symbolName": "_block_destroy_helper.54",
+                    "instructionPointer": "0x10521cf20",
+                    "frameIndex": 1,
+                    "moduleName": "Nudgecore_iOS",
+                    "isSDKFrame": true
+                },
+                {
+                    "instructionPointer": "0x1cef287ec",
+                    "symbolName": "<redacted>",
+                    "frameIndex": 2,
+                    "moduleName": "libdispatch.dylib",
+                    "isSDKFrame": false
+                },
+                {
+                    "symbolName": "<redacted>",
+                    "instructionPointer": "0x1cef13664",
+                    "frameIndex": 3,
+                    "moduleName": "libdispatch.dylib",
+                    "isSDKFrame": false
+                },
+                {
+                    "instructionPointer": "0x1cef26528",
+                    "symbolName": "<redacted>",
+                    "frameIndex": 4,
+                    "moduleName": "libdispatch.dylib",
+                    "isSDKFrame": false
+                },
+                {
+                    "symbolName": "<redacted>",
+                    "instructionPointer": "0x1cef251fc",
+                    "frameIndex": 5,
+                    "moduleName": "libdispatch.dylib",
+                    "isSDKFrame": false
+                },
+                {
+                    "instructionPointer": "0x1cef45a48",
+                    "symbolName": "<redacted>",
+                    "frameIndex": 6,
+                    "moduleName": "libdispatch.dylib",
+                    "isSDKFrame": false
+                },
+                {
+                    "instructionPointer": "0x1cef1dec8",
+                    "symbolName": "<redacted>",
+                    "frameIndex": 7,
+                    "moduleName": "libdispatch.dylib",
+                    "isSDKFrame": false
+                },
+                {
+                    "instructionPointer": "0x1cef1de04",
+                    "symbolName": "__dispatch_main_queue_callback_4CF",
+                    "frameIndex": 8,
+                    "moduleName": "libdispatch.dylib",
+                    "isSDKFrame": false
+                },
+                {
+                    "symbolName": "<redacted>",
+                    "instructionPointer": "0x1975a4520",
+                    "frameIndex": 9,
+                    "moduleName": "CoreFoundation",
+                    "isSDKFrame": false
+                }
+            ]
         }
-    ],
-    "exceptionReason": "Terminated by SIGTRAP at 0x10325d96c",
-    "binaryImages": [
-        {
-            "size": 49152,
-            "baseAddress": "0x1029dc000",
-            "name": "CrashReporterTest-PointTwenty",
-            "uuid": "498b9d16c587392d94aa268f81e43c72"
-        },
-        {
-            "size": 3244032,
-            "baseAddress": "0x10303c000",
-            "name": "Nudgecore_iOS",
-            "uuid": "cbc438d3cc373eeca25f5412c196ad5e"
-        }
-    ],
-    "kind": "crash",
-    "symbolication": {
-        "loadAddress": "0x10303c000",
-        "addresses": [
-            "0x10325d96c",
-            "0x1030baa58"
-        ],
-        "sdkVersion": "0.0.21",
-        "uuid": "cbc438d3cc373eeca25f5412c196ad5e"
     },
-    "sdkVersion": "0.0.21",
-    "sdkFrameCount": 2,
-    "timestamp": "2025-12-19T12:14:49Z"
+    "cat": "Crash"
 }

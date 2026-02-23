@@ -100,6 +100,92 @@ app.post('/symbolicate', (req, res) => {
     }
 });
 
+// GitHub Source Fetching Endpoint
+app.post('/fetch-source', async (req, res) => {
+    const { filename, line, sdkVersion, repoOwner, repoName } = req.body;
+    const token = process.env.GITHUB_TOKEN; // Needed for private repos
+
+    if (!filename || !repoOwner || !repoName) {
+        return res.status(400).json({ error: 'Missing filename, repoOwner, or repoName' });
+    }
+
+    if (!token) {
+        return res.status(500).json({ error: 'Server missing GITHUB_TOKEN environment variable' });
+    }
+
+    try {
+        console.log(`🔍 Searching for ${filename} in ${repoOwner}/${repoName} @ ${sdkVersion || 'default'}`);
+
+        // 1. Search for the file path
+        const searchUrl = `https://api.github.com/search/code?q=filename:${filename}+repo:${repoOwner}/${repoName}`;
+        const searchRes = await fetch(searchUrl, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        });
+
+        if (!searchRes.ok) throw new Error(`Search failed: ${searchRes.statusText}`);
+        const searchData = await searchRes.json();
+
+        if (!searchData.items || searchData.items.length === 0) {
+            return res.status(404).json({ error: 'File not found in repository' });
+        }
+
+        // Assuming the first match is correct (or filtering by path if user provided module info)
+        const filePath = searchData.items[0].path;
+        console.log(`📍 Found path: ${filePath}`);
+
+        // 2. Fetch Content
+        // Try exact version tag first, fallback to main/HEAD if it fails (per user request)
+        let ref = sdkVersion;
+        let contentUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${filePath}?ref=${ref}`;
+
+        let contentRes = await fetch(contentUrl, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github.v3.raw' // Request raw content
+            }
+        });
+
+        if (!contentRes.ok && ref) {
+            console.warn(`⚠️ Tag ${ref} not found, falling back to default branch`);
+            ref = null; // Clear ref to use default
+            contentUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${filePath}`;
+            contentRes = await fetch(contentUrl, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/vnd.github.v3.raw'
+                }
+            });
+        }
+
+        if (!contentRes.ok) throw new Error(`Content fetch failed: ${contentRes.statusText}`);
+
+        const fileContent = await contentRes.text();
+        const lines = fileContent.split('\n');
+        const targetLineIndex = parseInt(line) - 1;
+
+        // Extract snippet (e.g., 5 lines before and after)
+        const start = Math.max(0, targetLineIndex - 5);
+        const end = Math.min(lines.length, targetLineIndex + 6);
+        const snippet = lines.slice(start, end).join('\n');
+
+        // Return full info
+        res.json({
+            filePath,
+            ref: ref || 'HEAD',
+            startLine: start + 1,
+            targetLine: parseInt(line),
+            snippet
+        });
+
+    } catch (error) {
+        console.error("GitHub API Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.listen(port, () => {
     console.log(`Symbolication server running on http://localhost:${port}`);
 });
