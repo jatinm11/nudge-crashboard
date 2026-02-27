@@ -550,20 +550,66 @@ const parseCSV = (text) => {
 
   const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ''))
 
-  // Check if we have a payload column
-  let payloadIdx = headers.findIndex((h) => h.toLowerCase().includes("payload") || h.toLowerCase().includes("json"))
+  // Detect column indices from headers — supports multiple CSV formats
+  // Payload/body column: "body", "any(body)", or anything with "payload"/"json"
+  let payloadIdx = headers.findIndex((h) => h.toLowerCase() === "body")
   if (payloadIdx === -1) {
     payloadIdx = headers.findIndex((h) => h.includes("any(body)"))
   }
+  if (payloadIdx === -1) {
+    payloadIdx = headers.findIndex((h) => h.toLowerCase().includes("payload") || h.toLowerCase().includes("json"))
+  }
 
-  // Find id column if available
-  const idIdx = headers.findIndex((h) => h.includes("trace_id") || h.includes("id"))
+  // ID column: "trace_id" or "id"
+  const idIdx = headers.findIndex((h) => h.toLowerCase() === "trace_id" || h.toLowerCase() === "id")
+  // App column: "app"
+  const appIdx = headers.findIndex((h) => h.toLowerCase() === "app")
+  // Timestamp column at CSV level
+  const tsIdx = headers.findIndex((h) => h.toLowerCase() === "timestamp" || h.toLowerCase() === "time")
+
+  // State-machine CSV field parser — O(n), no regex backtracking
+  const splitCSVLine = (line) => {
+    const fields = []
+    let i = 0
+    while (i <= line.length) {
+      if (i === line.length) { fields.push(''); break }
+      if (line[i] === '"') {
+        // Quoted field: collect until closing quote
+        let value = ''
+        let j = i + 1
+        while (j < line.length) {
+          if (line[j] === '"') {
+            if (j + 1 < line.length && line[j + 1] === '"') {
+              value += '"'   // escaped "" → "
+              j += 2
+            } else {
+              j++            // closing quote
+              break
+            }
+          } else {
+            value += line[j]
+            j++
+          }
+        }
+        fields.push(value)
+        i = j + 1  // skip past comma after closing quote
+      } else {
+        // Unquoted field
+        let j = line.indexOf(',', i)
+        if (j === -1) j = line.length
+        fields.push(line.substring(i, j))
+        i = j + 1
+      }
+    }
+    return fields
+  }
 
   return lines.slice(1).map((line) => {
-    // Regex to split by comma but ignore commas inside quotes
-    const cols = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c =>
-      c.trim().replace(/^"|"$/g, '').replace(/""/g, '"')
-    )
+    const cols = splitCSVLine(line)
+
+    // Extract CSV-level fields
+    const csvApp = appIdx !== -1 ? cols[appIdx] : null
+    const csvId = idIdx !== -1 ? cols[idIdx] : null
 
     // Strategy 1: Extract from JSON payload
     if (payloadIdx !== -1 && cols[payloadIdx]) {
@@ -592,10 +638,16 @@ const parseCSV = (text) => {
           symName = data.crashLocation.symbolName
         }
 
+        // Extract symbolication metadata (addresses, loadAddress, uuid) from the payload
+        const symbolicationData = data.symbolication || null
+
+        // Use CSV-level app column first, then JSON-level, for client name
+        const clientName = csvApp || root.app || data.client || "Unknown Client"
+
         const crash = {
-          id: (idIdx !== -1 ? cols[idIdx] : null) || data.id || data.crash_id || `CRH-${Math.floor(Math.random() * 10000)}`,
-          client: root.app || data.client || "Unknown Client",
-          clientId: data.clientId || root.app || "client-unknown",
+          id: csvId || data.id || data.crash_id || `CRH-${Math.floor(Math.random() * 10000)}`,
+          client: clientName,
+          clientId: data.clientId || clientName || "client-unknown",
           signal: data.signal || "UNKNOWN",
           exceptionName: data.exceptionName || data.note || "Unknown Exception",
           timestamp: data.timestamp || new Date().toISOString(),
@@ -611,13 +663,16 @@ const parseCSV = (text) => {
             instructionPointer: sdkFrame?.instructionPointer || data.crashLocation?.instructionPointer,
             loadAddress: data.crashLocation?.loadAddress || data.loadAddress // Captured from iOS
           },
+          // Store the full symbolication metadata from the payload
+          symbolication: symbolicationData,
           frames: frames,
           status: data.status || "Open",
           severity: data.severity || (data.kind === "suspected_crash" ? "Low" : "High"),
           device: data.device || {},
           breadcrumbs: data.breadcrumbs || [],
           http: data.http || {},
-          user: data.user || {}
+          user: data.user || {},
+          exceptionReason: data.exceptionReason || ""
         }
         return crash
       } catch (e) {
@@ -645,26 +700,37 @@ const symbolicateCrashes = async (crashesList, apiUrl) => {
   const groups = {}
 
   crashesList.forEach(c => {
-    if (c.sdkVersion && c.crashLocation?.instructionPointer) {
-      const loadAddr = c.crashLocation.loadAddress || "default"
-      const key = `${c.sdkVersion}|${loadAddr}`
+    // Use symbolication object if available, fall back to crashLocation
+    const sym = c.symbolication
+    const loadAddr = sym?.loadAddress || c.crashLocation?.loadAddress || null
+    const sdkVersion = sym?.sdkVersion || c.sdkVersion
+    const uuid = sym?.uuid || null
 
-      if (!groups[key]) {
-        groups[key] = { sdkVersion: c.sdkVersion, loadAddress: loadAddr === "default" ? null : loadAddr, items: [] }
-      }
-      groups[key].items.push(c)
+    if (!sdkVersion) return
+
+    // Collect all addresses: prefer symbolication.addresses, fall back to crashLocation IP
+    const addresses = sym?.addresses || (c.crashLocation?.instructionPointer ? [c.crashLocation.instructionPointer] : [])
+    if (addresses.length === 0) return
+
+    const key = `${sdkVersion}|${loadAddr || 'default'}`
+
+    if (!groups[key]) {
+      groups[key] = { sdkVersion, loadAddress: loadAddr, uuid, addresses: new Set(), items: [] }
     }
+    addresses.forEach(a => groups[key].addresses.add(a))
+    groups[key].items.push(c)
   })
 
   const updates = new Map()
 
   for (const grp of Object.values(groups)) {
-    const addresses = [...new Set(grp.items.map(c => c.crashLocation.instructionPointer))]
+    const addresses = [...grp.addresses]
     if (addresses.length === 0) continue
 
     try {
       const payload = { sdkVersion: grp.sdkVersion, addresses }
       if (grp.loadAddress) payload.loadAddress = grp.loadAddress
+      if (grp.uuid) payload.uuid = grp.uuid
 
       const res = await fetch(`${apiUrl}/symbolicate`, {
         method: 'POST',
@@ -682,18 +748,40 @@ const symbolicateCrashes = async (crashesList, apiUrl) => {
     }
   }
 
-  // Return updated list
+  // Return updated list — update crashLocation AND individual frames
   return crashesList.map(c => {
+    let updated = false
+
+    // Update crashLocation symbol
     const addr = c.crashLocation?.instructionPointer
+    let newCrashLocation = c.crashLocation
     if (addr && updates.has(addr)) {
       const resolved = updates.get(addr)
+      newCrashLocation = {
+        ...c.crashLocation,
+        symbolName: resolved,
+        demangledName: resolved
+      }
+      updated = true
+    }
+
+    // Update individual frames with symbolicated names
+    const newFrames = c.frames?.map(f => {
+      if (f.instructionPointer && updates.has(f.instructionPointer)) {
+        updated = true
+        return {
+          ...f,
+          symbolName: updates.get(f.instructionPointer)
+        }
+      }
+      return f
+    })
+
+    if (updated) {
       return {
         ...c,
-        crashLocation: {
-          ...c.crashLocation,
-          symbolName: resolved,
-          demangledName: resolved
-        }
+        crashLocation: newCrashLocation,
+        frames: newFrames || c.frames
       }
     }
     return c
@@ -1818,6 +1906,141 @@ const CrashDashboard = () => {
     const c = selectedCrash
     const [selectedFrame, setSelectedFrame] = useState(null)
 
+    // Generate a human-readable crash report summary
+    const reportSummary = useMemo(() => {
+      const sections = []
+      const frames = c.frames || []
+      const sdkFrames = frames.filter(f => f.isSDKFrame)
+      const nonSdkFrames = frames.filter(f => !f.isSDKFrame)
+      const device = c.device || {}
+      const freeRAM = typeof device.freeRAMMB === 'number' ? device.freeRAMMB : null
+      const battery = typeof device.batteryLevel === 'number' ? Math.round(device.batteryLevel * 100) : null
+      const exceptionReason = c.exceptionReason || ""
+
+      // --- 1. What Happened ---
+      const whatHappened = []
+      whatHappened.push(`The app received a ${c.signal || 'crash'} signal with a ${c.exceptionName || 'unknown'} exception.`)
+      if (exceptionReason) {
+        whatHappened.push(`Exception reason: "${exceptionReason}"`)
+      }
+
+      // Detect known crash patterns
+      const isOOM = c.exceptionName === 'NSMallocException' || exceptionReason.toLowerCase().includes('allocate')
+      const isUnrecognizedSelector = exceptionReason.includes('unrecognized selector')
+      const isSIGSEGV = c.signal === 'SIGSEGV'
+      const isSIGTRAP = c.signal === 'SIGTRAP'
+
+      if (isOOM) {
+        whatHappened.push('This is an Out of Memory (OOM) crash — the system could not allocate memory for an object.')
+      } else if (isUnrecognizedSelector) {
+        const selectorMatch = exceptionReason.match(/\[(\S+)\s+(\S+)\]/)
+        if (selectorMatch) {
+          whatHappened.push(`A message "${selectorMatch[2]}" was sent to an object of class "${selectorMatch[1]}" which does not respond to it. This typically indicates type confusion or a dangling pointer.`)
+        }
+      } else if (isSIGSEGV) {
+        whatHappened.push('The process tried to access invalid memory (null pointer dereference or use-after-free).')
+      } else if (isSIGTRAP) {
+        whatHappened.push('The process hit a trap instruction — typically a Swift runtime assertion failure, a force-unwrap of nil, or an array bounds violation.')
+      }
+
+      sections.push({ title: 'What Happened', items: whatHappened })
+
+      // --- 2. Call Flow ---
+      if (frames.length > 0) {
+        const callFlow = []
+        // Build bottom-up call flow from SDK frames
+        const isPLCrashReporterFrame = (sym) => {
+          if (!sym) return false
+          const s = sym.toLowerCase()
+          return s.includes('plcrashreporter') || s.includes('_plcrash') || s.includes('uncaught_exception_handler') || s.includes('async_mach_exception')
+        }
+
+        const plcrashFrames = sdkFrames.filter(f => isPLCrashReporterFrame(f.symbolName))
+        const actualSdkFrames = sdkFrames.filter(f => !isPLCrashReporterFrame(f.symbolName))
+
+        if (actualSdkFrames.length > 0) {
+          const flowSteps = actualSdkFrames
+            .sort((a, b) => (b.frameIndex || 0) - (a.frameIndex || 0))
+            .map(f => f.symbolName || f.instructionPointer)
+          callFlow.push('SDK call flow (bottom → top):')
+          flowSteps.forEach((step, i) => {
+            callFlow.push(`  ${i + 1}. ${step}`)
+          })
+        }
+
+        if (plcrashFrames.length > 0 && actualSdkFrames.length === 0) {
+          callFlow.push('The SDK frames are purely from PLCrashReporter recording the crash (crash reporting infrastructure), not the cause.')
+        }
+
+        if (callFlow.length > 0) {
+          sections.push({ title: 'Call Flow', items: callFlow })
+        }
+      }
+
+      // --- 3. Root Cause Attribution ---
+      const attribution = []
+      const isPLCrashOnly = sdkFrames.every(f => {
+        const s = (f.symbolName || '').toLowerCase()
+        return s.includes('plcrashreporter') || s.includes('_plcrash') || s.includes('uncaught_exception_handler') || s.includes('async_mach_exception') || s.includes('_plcrash_writer')
+      })
+
+      if (sdkFrames.length === 0) {
+        attribution.push('⚪ No SDK frames in the stack trace. This crash does not appear related to the Nudgecore SDK.')
+      } else if (isPLCrashOnly) {
+        attribution.push('✅ SDK frames are only PLCrashReporter (crash recording infrastructure). This is a HOST APP crash, not an SDK issue.')
+        attribution.push('The SDK was doing its job — catching and recording the uncaught exception thrown by the app.')
+      } else {
+        attribution.push('⚠️ SDK frames are present in the crash call flow. This crash appears to originate in or passes through Nudgecore SDK code.')
+        const topSdkFrame = sdkFrames.sort((a, b) => (a.frameIndex || 0) - (b.frameIndex || 0))[0]
+        if (topSdkFrame) {
+          attribution.push(`Top SDK frame: ${topSdkFrame.symbolName || topSdkFrame.instructionPointer} (frame #${topSdkFrame.frameIndex})`)
+        }
+      }
+
+      sections.push({ title: 'Root Cause Attribution', items: attribution })
+
+      // --- 4. Device Context ---
+      const context = []
+      if (freeRAM !== null) {
+        if (freeRAM < 50) {
+          context.push(`🔴 Critically low free RAM: ${freeRAM.toFixed(1)} MB — memory pressure likely contributed to this crash.`)
+        } else if (freeRAM < 150) {
+          context.push(`🟡 Low free RAM: ${freeRAM.toFixed(1)} MB — the device was under moderate memory pressure.`)
+        } else {
+          context.push(`🟢 Free RAM: ${freeRAM.toFixed(1)} MB — memory pressure was not a factor.`)
+        }
+      }
+      if (battery !== null && battery <= 15) {
+        context.push(`🔋 Low battery: ${battery}% — the OS may throttle background processes.`)
+      }
+      if (device.model) {
+        context.push(`Device: ${device.model}, iOS ${c.osVersion || 'Unknown'}`)
+      }
+
+      if (context.length > 0) {
+        sections.push({ title: 'Device Context', items: context })
+      }
+
+      // --- 5. Verdict ---
+      const verdict = []
+      if (isOOM && freeRAM !== null && freeRAM < 100) {
+        verdict.push('This crash is caused by memory exhaustion on a resource-constrained device. The host app (or one of its dependencies) exceeded available memory.')
+        if (isPLCrashOnly) {
+          verdict.push('The Nudgecore SDK is not at fault — it was only recording the crash.')
+        }
+      } else if (isPLCrashOnly && sdkFrames.length > 0) {
+        verdict.push('The crash originated in the host app code. The Nudgecore SDK correctly caught and reported the exception.')
+      } else if (sdkFrames.length > 0 && !isPLCrashOnly) {
+        verdict.push('This crash involves Nudgecore SDK code and should be investigated by the SDK team.')
+      }
+
+      if (verdict.length > 0) {
+        sections.push({ title: 'Verdict', items: verdict })
+      }
+
+      return sections
+    }, [c])
+
     return (
       <div className='fixed inset-0 z-50 flex items-center justify-center'>
         {/* Backdrop */}
@@ -1877,6 +2100,32 @@ const CrashDashboard = () => {
                 />
               </div>
             </Section>
+
+            {/* Report Summary */}
+            {reportSummary.length > 0 && (
+              <Section title='Report Summary' icon={FileText}>
+                <div className={`rounded-xl border divide-y ${darkMode ? 'bg-neutral-800/50 border-neutral-700 divide-neutral-700' : 'bg-gradient-to-br from-slate-50 to-blue-50/30 border-slate-200 divide-slate-200'}`}>
+                  {reportSummary.map((section, si) => (
+                    <div key={si} className='px-4 py-3'>
+                      <h4 className={`text-xs font-semibold uppercase tracking-wider mb-2 ${section.title === 'Verdict'
+                        ? (darkMode ? 'text-blue-400' : 'text-blue-700')
+                        : section.title === 'Root Cause Attribution'
+                          ? (darkMode ? 'text-amber-400' : 'text-amber-700')
+                          : (darkMode ? 'text-neutral-400' : 'text-slate-500')
+                        }`}>{section.title}</h4>
+                      <div className='space-y-1'>
+                        {section.items.map((item, ii) => (
+                          <p key={ii} className={`text-sm leading-relaxed ${item.startsWith('  ')
+                            ? `font-mono text-xs pl-3 ${darkMode ? 'text-neutral-300' : 'text-slate-600'}`
+                            : (darkMode ? 'text-neutral-200' : 'text-slate-700')
+                            }`}>{item}</p>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
 
             {/* System Information */}
             <Section title='System Information' icon={Activity}>
